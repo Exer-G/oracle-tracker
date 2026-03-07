@@ -13,8 +13,9 @@ let weeklyChart = null;
 let currentWeekOffset = 0;
 let teamMembers = []; // Loaded from Supabase (or fallback to TT_TEAM)
 let mergedProjects = []; // Merged TT_PROJECTS + Supabase projects
+let realtimeChannel = null; // Supabase realtime channel reference
 
-console.log('[Tracker] Starting...');
+debug('[Tracker] Starting...');
 
 // ============================================================
 // INITIALIZATION
@@ -34,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         supabaseClient.auth.onAuthStateChange((event, session) => {
-            console.log('[Auth] State change:', event);
+            debug('[Auth] State change:', event);
             if (session && session.user) {
                 currentUser = session.user;
                 initializeApp();
@@ -88,6 +89,12 @@ async function signOut() {
             window.activityTracker.stop();
         }
 
+        // Unsubscribe from realtime channel
+        if (realtimeChannel) {
+            await supabaseClient.removeChannel(realtimeChannel);
+            realtimeChannel = null;
+        }
+
         await supabaseClient.auth.signOut();
         showLogin();
     } catch (err) {
@@ -116,9 +123,9 @@ async function initializeApp() {
     // Load team from Supabase (fallback to config.js)
     await loadTeamMembers();
 
-    // Determine role from loaded team
+    // Determine role from loaded team (DB role only — no hardcoded bypass)
     currentTeamMember = teamMembers.find(m => m.email.toLowerCase() === email);
-    isAdmin = currentTeamMember?.role === 'admin' || TT_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(email);
+    isAdmin = currentTeamMember?.role === 'admin';
 
     if (!currentTeamMember) {
         toast('Your account is not registered in this team. Contact admin.', 'error');
@@ -165,7 +172,7 @@ async function initializeApp() {
     // Render settings
     renderSettings();
 
-    console.log('[App] Initialized as', isAdmin ? 'admin' : 'freelancer', '-', currentTeamMember.name);
+    debug('[App] Initialized as', isAdmin ? 'admin' : 'freelancer', '-', currentTeamMember.name);
 }
 
 function updateUserCard() {
@@ -219,7 +226,7 @@ async function populateProjectDropdowns() {
                         allProjects.push({ id: p.id, name: p.name, client: '', status: p.status });
                     }
                 });
-                console.log('[Projects] Merged', data.length, 'Supabase projects with', TT_PROJECTS.length, 'local projects');
+                debug('[Projects] Merged', data.length, 'Supabase projects with', TT_PROJECTS.length, 'local projects');
             }
         }
     } catch (err) {
@@ -294,10 +301,10 @@ async function loadTeamMembers() {
                 currency: m.currency || 'USD',
                 status: m.status || 'active'
             }));
-            console.log('[Team] Loaded', teamMembers.length, 'members from Supabase');
+            debug('[Team] Loaded', teamMembers.length, 'members from Supabase');
         } else {
             teamMembers = [...TT_TEAM];
-            console.log('[Team] No Supabase data, using config.js fallback');
+            debug('[Team] No Supabase data, using config.js fallback');
         }
     } catch (err) {
         console.error('[Team] Load error, using fallback:', err);
@@ -496,7 +503,7 @@ function setupTimerCallbacks() {
         const frame = await window.screenshotCapture.captureFrame();
         if (frame) {
             updateScreenshotPreview(frame);
-            console.log('[Timer] Screenshot captured for block', engine.currentBlockNumber);
+            debug('[Timer] Screenshot captured for block', engine.currentBlockNumber);
         }
     };
 
@@ -762,9 +769,14 @@ async function saveTimeBlock(block, screenshotUrl) {
 function storeBlockLocally(block, screenshotUrl) {
     try {
         const pending = JSON.parse(localStorage.getItem('tt_pending_blocks') || '[]');
-        pending.push({ ...block, screenshotUrl, timestamp: Date.now() });
+        pending.push({
+            ...block,
+            screenshotUrl,
+            projectId: window.timerEngine?.projectId || '',
+            timestamp: Date.now()
+        });
         localStorage.setItem('tt_pending_blocks', JSON.stringify(pending));
-        console.log('[Data] Block stored locally for later sync (' + pending.length + ' pending)');
+        debug('[Data] Block stored locally for later sync (' + pending.length + ' pending)');
     } catch (err) {
         console.error('[Data] Local storage error:', err);
     }
@@ -773,10 +785,17 @@ function storeBlockLocally(block, screenshotUrl) {
 async function syncPendingBlocks() {
     if (!supabaseClient || !currentTeamMember) return;
 
-    const pending = JSON.parse(localStorage.getItem('tt_pending_blocks') || '[]');
+    let pending;
+    try {
+        pending = JSON.parse(localStorage.getItem('tt_pending_blocks') || '[]');
+    } catch (parseErr) {
+        console.error('[Sync] Corrupted pending blocks in localStorage, clearing:', parseErr);
+        localStorage.removeItem('tt_pending_blocks');
+        return;
+    }
     if (!pending.length) return;
 
-    console.log('[Sync] Attempting to sync', pending.length, 'pending blocks...');
+    debug('[Sync] Attempting to sync', pending.length, 'pending blocks...');
     const failed = [];
     let synced = 0;
 
@@ -818,7 +837,7 @@ async function syncPendingBlocks() {
 
     localStorage.setItem('tt_pending_blocks', JSON.stringify(failed));
     if (synced > 0) {
-        console.log('[Sync] Synced', synced, 'pending blocks.', failed.length, 'remaining.');
+        debug('[Sync] Synced', synced, 'pending blocks.', failed.length, 'remaining.');
         toast('Synced ' + synced + ' pending time blocks', 'success');
         await loadTimeBlocks();
     }
@@ -854,7 +873,7 @@ async function loadTimeBlocks() {
         }
 
         timeBlocks = data || [];
-        console.log('[Data] Loaded', timeBlocks.length, 'time blocks');
+        debug('[Data] Loaded', timeBlocks.length, 'time blocks');
     } catch (err) {
         console.error('[Data] Load error:', err);
     }
@@ -958,7 +977,6 @@ function renderMyWeekly() {
 
 function renderWeeklyChart(blocks) {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const weekStart = getWeekStart(new Date());
     const hoursPerDay = new Array(7).fill(0);
 
     blocks.forEach(b => {
@@ -1223,7 +1241,13 @@ document.addEventListener('click', (e) => {
 function setupRealtime() {
     if (!supabaseClient) return;
 
-    supabaseClient
+    // Clean up any existing channel before subscribing
+    if (realtimeChannel) {
+        supabaseClient.removeChannel(realtimeChannel);
+        realtimeChannel = null;
+    }
+
+    realtimeChannel = supabaseClient
         .channel('tt_time_blocks_changes')
         .on('postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'tt_time_blocks' },

@@ -10,7 +10,7 @@ export async function handler(event) {
     };
 
     if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 200, headers, body: '' };
+        return { statusCode: 204, headers, body: '' };
     }
 
     if (event.httpMethod !== 'POST') {
@@ -35,7 +35,7 @@ export async function handler(event) {
 
         // Yoco expects amount in cents (ZAR)
         const amountInCents = Math.round(amount * 100);
-        const siteUrl = process.env.URL || 'https://oracle-invoicer-exd.netlify.app';
+        const siteUrl = process.env.URL || 'https://hiengineer.app';
 
         const response = await fetch('https://payments.yoco.com/api/checkouts', {
             method: 'POST',

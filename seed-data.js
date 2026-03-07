@@ -1,8 +1,22 @@
 // Oracle Invoice Generator - Seed Data from existing Oracle system
 // This script pre-loads existing client and invoice data into localStorage
 // Skips if data already exists locally OR if user is authenticated (cloud data takes priority)
+//
+// ⚠️  WARNING: This file is for local dev / migration use only.
+//     It must NOT be loaded in production. Guard below prevents execution on
+//     the production hostname, but the safest approach is to never include
+//     this script in index.html on a live site.
 
 (function seedData() {
+    // Block execution on production hostname
+    const hostname = window.location.hostname;
+    const isProduction = hostname === 'hiengineer.app' ||
+        hostname.endsWith('.netlify.app') ||
+        (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== '');
+    if (isProduction) {
+        return;
+    }
+
     // Only seed if no data exists locally
     if (localStorage.getItem('oracle_invoices') && JSON.parse(localStorage.getItem('oracle_invoices')).length > 0) {
         console.log('Data already exists, skipping seed.');

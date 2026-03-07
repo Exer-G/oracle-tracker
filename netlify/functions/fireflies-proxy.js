@@ -15,31 +15,34 @@ exports.handler = async (event) => {
     };
 
     if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 200, headers, body: '' };
+        return { statusCode: 204, headers, body: '' };
     }
 
     if (event.httpMethod !== 'POST') {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     }
 
+    if (!FIREFLIES_API_KEY) {
+        return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ error: 'Fireflies API key not configured. Set FIREFLIES_API_KEY in Netlify env vars.' })
+        };
+    }
+
     try {
         const body = JSON.parse(event.body);
         const { query, variables } = body;
-        
-        // Get API key from environment variable
-        const apiKey = FIREFLIES_API_KEY;
 
         if (!query) {
             return { statusCode: 400, headers, body: JSON.stringify({ error: 'GraphQL query required' }) };
         }
 
-        console.log('[Fireflies Proxy] Making request...');
-
         const response = await fetch('https://api.fireflies.ai/graphql', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                'Authorization': `Bearer ${FIREFLIES_API_KEY}`
             },
             body: JSON.stringify({ query, variables })
         });

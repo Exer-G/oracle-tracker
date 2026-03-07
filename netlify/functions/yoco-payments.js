@@ -10,7 +10,11 @@ export async function handler(event) {
     };
 
     if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 200, headers, body: '' };
+        return { statusCode: 204, headers, body: '' };
+    }
+
+    if (event.httpMethod !== 'GET') {
+        return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     }
 
     const YOCO_SECRET_KEY = process.env.YOCO_SECRET_KEY;
