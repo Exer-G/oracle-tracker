@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oracle Tracker | Exergy Designs</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%23000' rx='15' width='100' height='100'/><text x='50' y='68' font-size='45' font-family='system-ui' font-weight='700' fill='%23fff' text-anchor='middle'>TT</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div class="login-screen" id="loginScreen">
+        <div class="login-card">
+            <div class="login-logo"><span>TT</span></div>
+            <h1>Oracle Tracker</h1>
+            <p>Time Tracking Platform</p>
+            <button class="google-btn" onclick="signInWithGoogle()">
+                <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                Continue with Google
+            </button>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div class="app" id="app" style="display:none;">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon"><span>TT</span></div>
+                    <div class="logo-text">
+                        <h1>Oracle Tracker</h1>
+                        <span>Exergy Designs</span>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav" id="sidebarNav">
+                <!-- Freelancer Nav -->
+                <div class="nav-section freelancer-nav">
+                    <div class="nav-section-title">Tracking</div>
+                    <a class="nav-item active" data-page="timer">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        Timer
+                    </a>
+                    <a class="nav-item" data-page="my-time">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                        My Time
+                    </a>
+                    <a class="nav-item" data-page="my-weekly">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        My Weekly
+                    </a>
+                </div>
+
+                <!-- Admin Nav -->
+                <div class="nav-section admin-nav" style="display:none;">
+                    <div class="nav-section-title">Admin</div>
+                    <a class="nav-item" data-page="team-overview">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        Team Overview
+                        <span class="nav-badge" id="teamOnlineBadge">0</span>
+                    </a>
+                    <a class="nav-item" data-page="time-review">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        Time Review
+                    </a>
+                    <a class="nav-item" data-page="weekly-reports">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        Weekly Reports
+                    </a>
+                    <a class="nav-item" data-page="team-management">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                        Team Management
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">System</div>
+                    <a class="nav-item" data-page="settings">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        Settings
+                    </a>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-card" id="userCard">
+                    <div class="user-avatar" id="userAvatar">--</div>
+                    <div class="user-info">
+                        <div class="user-name" id="userName">Loading...</div>
+                        <div class="user-role" id="userRole">--</div>
+                    </div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="signOut()" style="width:100%;margin-top:8px;">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                    Sign Out
+                </button>
+            </div>
+        </aside>
+
+        <main class="main">
+            <header class="header">
+                <div class="header-left">
+                    <button class="mobile-menu-btn" onclick="toggleSidebar()">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    </button>
+                    <div>
+                        <h2 id="pageTitle">Timer</h2>
+                        <p id="pageSubtitle">Track your work time</p>
+                    </div>
+                </div>
+                <div class="header-right" style="display: flex; gap: 8px; align-items: center;">
+                    <button class="btn btn-secondary btn-sm" onclick="syncProjectsAndAllocations()" title="Sync projects & allocations from Oracle dashboard" style="display: flex; align-items: center; gap: 4px;">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        Sync
+                    </button>
+                    <div class="tracker-status" id="headerTrackerStatus">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Idle</span>
+                    </div>
+                </div>
+            </header>
+
+            <div class="content">
+                <!-- ========== TIMER VIEW (Freelancer Default) ========== -->
+                <section class="page active" id="page-timer">
+                    <div class="time-tracker-widget">
+                        <div class="tracker-header">
+                            <div class="tracker-label">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                TIME TRACKER
+                            </div>
+                            <div class="tracker-status-inline" id="trackerStatusInline">
+                                <span class="status-dot"></span>
+                                <span>Stopped</span>
+                            </div>
+                        </div>
+
+                        <div class="tracker-display" id="trackerDisplay">00:00:00</div>
+
+                        <div class="block-progress" id="blockProgress">
+                            <div class="block-segment" data-seg="0"></div>
+                            <div class="block-segment" data-seg="1"></div>
+                            <div class="block-segment" data-seg="2"></div>
+                            <div class="block-segment" data-seg="3"></div>
+                            <div class="block-segment" data-seg="4"></div>
+                            <div class="block-segment" data-seg="5"></div>
+                            <div class="block-segment" data-seg="6"></div>
+                            <div class="block-segment" data-seg="7"></div>
+                            <div class="block-segment" data-seg="8"></div>
+                            <div class="block-segment" data-seg="9"></div>
+                        </div>
+                        <div class="block-label" id="blockLabel">10-minute block: 0:00 / 10:00</div>
+
+                        <div class="tracker-inputs">
+                            <select class="form-input" id="trackerProject">
+                                <option value="">Select Project...</option>
+                            </select>
+                            <input type="text" class="form-input" id="trackerMemo" placeholder="What are you working on?">
+                        </div>
+
+                        <div class="tracker-controls">
+                            <button class="tracker-btn reset" id="btnReset" onclick="resetTimer()" title="Reset">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            </button>
+                            <button class="tracker-btn start" id="btnStartStop" onclick="toggleTimer()">
+                                <svg fill="currentColor" viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg>
+                                <svg fill="currentColor" viewBox="0 0 24 24" id="stopIcon" style="display:none;"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                            </button>
+                            <button class="tracker-btn save" id="btnSave" onclick="saveSession()" title="Save Session">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="timer-details-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Screenshot Preview</h3>
+                                <span class="badge" id="screenshotStatus">No Screen Shared</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="screenshot-preview" id="screenshotPreview">
+                                    <div class="no-capture">
+                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="32" height="32"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                        <p>Screen capture starts when you begin tracking</p>
+                                    </div>
+                                </div>
+                                <div class="activity-meter">
+                                    <div class="activity-meter-label">
+                                        <span>Activity</span>
+                                        <span id="activityPercent">0%</span>
+                                    </div>
+                                    <div class="activity-bar">
+                                        <div class="activity-bar-fill" id="activityBarFill" style="width:0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Current Session</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="session-stats">
+                                    <div class="session-stat">
+                                        <div class="session-stat-value" id="sessionBlocks">0</div>
+                                        <div class="session-stat-label">Blocks</div>
+                                    </div>
+                                    <div class="session-stat">
+                                        <div class="session-stat-value" id="sessionDuration">0:00</div>
+                                        <div class="session-stat-label">Duration</div>
+                                    </div>
+                                    <div class="session-stat">
+                                        <div class="session-stat-value" id="sessionActivity">0%</div>
+                                        <div class="session-stat-label">Activity</div>
+                                    </div>
+                                </div>
+                                <div class="session-blocks-list" id="sessionBlocksList">
+                                    <div class="empty-state">No blocks recorded yet</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== MY TIME VIEW ========== -->
+                <section class="page" id="page-my-time">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="myTodayHours">0h 0m</div>
+                                <div class="stat-label">Today</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="myWeekHours">0h 0m</div>
+                                <div class="stat-label">This Week</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="myActivityAvg">0%</div>
+                                <div class="stat-label">Avg Activity</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="myEarnings">$0</div>
+                                <div class="stat-label">Est. Earnings</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Time Entries</h3>
+                            <div class="filter-tabs">
+                                <button class="filter-btn active" data-filter="today" onclick="filterMyTime('today')">Today</button>
+                                <button class="filter-btn" data-filter="week" onclick="filterMyTime('week')">This Week</button>
+                                <button class="filter-btn" data-filter="month" onclick="filterMyTime('month')">This Month</button>
+                            </div>
+                        </div>
+                        <div class="card-body flush">
+                            <div class="time-entries-list" id="myTimeList">
+                                <div class="empty-state">No time entries yet. Start the timer to begin tracking.</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== MY WEEKLY SUMMARY ========== -->
+                <section class="page" id="page-my-weekly">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="weeklyTotalHours">0h</div>
+                                <div class="stat-label">Total Hours</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="weeklyEarnings">$0</div>
+                                <div class="stat-label">Earnings</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="weeklyActivity">0%</div>
+                                <div class="stat-label">Avg Activity</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="weeklyBlocks">0</div>
+                                <div class="stat-label">Blocks</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="page-grid-2">
+                        <div class="card">
+                            <div class="card-header"><h3>Hours by Day</h3></div>
+                            <div class="card-body">
+                                <canvas id="weeklyChart" height="200"></canvas>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header"><h3>Daily Breakdown</h3></div>
+                            <div class="card-body flush">
+                                <div class="daily-breakdown" id="dailyBreakdown">
+                                    <div class="empty-state">No data for this week</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== TEAM OVERVIEW (Admin) ========== -->
+                <section class="page" id="page-team-overview">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="totalFreelancers">0</div>
+                                <div class="stat-label">Freelancers</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="3" stroke-width="1.5"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 2v2m0 16v2m10-10h-2M4 12H2m15.07-7.07l-1.41 1.41M8.34 15.66l-1.41 1.41m12.14 0l-1.41-1.41M8.34 8.34L6.93 6.93"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="currentlyTracking">0</div>
+                                <div class="stat-label">Currently Tracking</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="teamTodayHours">0h</div>
+                                <div class="stat-label">Team Hours Today</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="teamWeekCost">$0</div>
+                                <div class="stat-label">This Week's Cost</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Team Status</h3>
+                        </div>
+                        <div class="card-body flush">
+                            <div class="team-list" id="teamList">
+                                <div class="empty-state">Loading team...</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== TIME REVIEW (Admin - Work Diary) ========== -->
+                <section class="page" id="page-time-review">
+                    <div class="review-filters">
+                        <select class="form-input" id="reviewFreelancer" onchange="loadTimeReview()">
+                            <option value="">All Freelancers</option>
+                        </select>
+                        <input type="date" class="form-input" id="reviewDate" onchange="loadTimeReview()">
+                        <select class="form-input" id="reviewProject" onchange="loadTimeReview()">
+                            <option value="">All Projects</option>
+                        </select>
+                    </div>
+
+                    <div class="screenshot-grid" id="screenshotGrid">
+                        <div class="empty-state">Select a freelancer and date to review time entries.</div>
+                    </div>
+                </section>
+
+                <!-- ========== WEEKLY REPORTS (Admin) ========== -->
+                <section class="page" id="page-weekly-reports">
+                    <div class="week-selector">
+                        <button class="btn btn-secondary btn-sm" onclick="changeWeek(-1)">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                            Previous
+                        </button>
+                        <div class="week-display">
+                            <h3 id="weekRangeDisplay">Feb 10 - Feb 16, 2026</h3>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="changeWeek(1)">
+                            Next
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </button>
+                    </div>
+
+                    <div class="reports-list" id="reportsList">
+                        <div class="empty-state">Loading reports...</div>
+                    </div>
+
+                    <div class="report-totals card" id="reportTotals" style="display:none;">
+                        <div class="card-body">
+                            <div class="report-total-row">
+                                <span class="report-total-label">Team Total</span>
+                                <span class="report-total-hours" id="reportTotalHours">0h</span>
+                                <span class="report-total-cost" id="reportTotalCost">$0</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== TEAM MANAGEMENT (Admin) ========== -->
+                <section class="page" id="page-team-management">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Team Members <span style="font-weight:400;color:var(--grey-500);font-size:12px;" id="teamMgmtCount"></span></h3>
+                            <button class="btn btn-primary btn-sm" onclick="openAddMemberModal()">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                Add Member
+                            </button>
+                        </div>
+                        <div class="card-body flush">
+                            <div id="teamMgmtList">
+                                <div class="empty-state">Loading team...</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ========== SETTINGS ========== -->
+                <section class="page" id="page-settings">
+                    <div class="settings-grid">
+                        <div class="card">
+                            <div class="card-header"><h3>Profile</h3></div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label class="form-label">Name</label>
+                                    <input type="text" class="form-input" id="settingsName" disabled>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Email</label>
+                                    <input type="text" class="form-input" id="settingsEmail" disabled>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Role</label>
+                                    <input type="text" class="form-input" id="settingsRole" disabled>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Hourly Rate</label>
+                                    <input type="text" class="form-input" id="settingsRate" disabled>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header"><h3>Tracker Settings</h3></div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label class="form-label">Block Duration</label>
+                                    <input type="text" class="form-input" value="10 minutes" disabled>
+                                    <span class="form-hint">Fixed at 10-minute intervals (Upwork standard)</span>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Screenshot Quality</label>
+                                    <select class="form-input" id="settingsQuality">
+                                        <option value="0.4">Low (faster upload)</option>
+                                        <option value="0.6" selected>Medium (recommended)</option>
+                                        <option value="0.8">High (larger files)</option>
+                                    </select>
+                                </div>
+                                <div class="status-box">
+                                    <div class="status-row">
+                                        <span>Supabase</span>
+                                        <span class="badge badge-success" id="supabaseStatus">Connected</span>
+                                    </div>
+                                    <div class="status-row">
+                                        <span>Screen Capture</span>
+                                        <span class="badge" id="captureStatus">Not Active</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Team Member Modal -->
+    <div class="modal-overlay" id="memberModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="memberModalTitle">Add Team Member</h3>
+                <button class="modal-close" onclick="closeModal('memberModal')">&times;</button>
+            </div>
+            <form id="memberForm" onsubmit="saveMemberForm(event)">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Member ID</label>
+                        <input type="text" class="form-input" id="memberId" placeholder="e.g. john-doe" required pattern="[a-z0-9\-]+" title="Lowercase letters, numbers, hyphens only">
+                        <span class="form-hint">Unique identifier (lowercase, no spaces)</span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" class="form-input" id="memberName" placeholder="John Doe" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email Address</label>
+                        <input type="email" class="form-input" id="memberEmail" placeholder="john@example.com" required>
+                        <span class="form-hint">Must match their Google login email</span>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Title / Role Description</label>
+                        <input type="text" class="form-input" id="memberTitle" placeholder="e.g. Engineer, Designer">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1;">
+                            <label class="form-label">Hourly Rate</label>
+                            <input type="number" class="form-input" id="memberRate" placeholder="0" min="0" step="0.01" required>
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label class="form-label">Currency</label>
+                            <select class="form-input" id="memberCurrency">
+                                <option value="USD">USD ($)</option>
+                                <option value="ZAR">ZAR (R)</option>
+                                <option value="EUR">EUR (&euro;)</option>
+                                <option value="GBP">GBP (&pound;)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1;">
+                            <label class="form-label">Role</label>
+                            <select class="form-input" id="memberRole">
+                                <option value="freelancer">Freelancer</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label class="form-label">Status</label>
+                            <select class="form-input" id="memberStatus">
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('memberModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Member</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Screenshot Preview Modal -->
+    <div class="modal-overlay" id="screenshotModal">
+        <div class="modal modal-large">
+            <div class="modal-header">
+                <h3 id="modalScreenshotTitle">Screenshot</h3>
+                <button class="modal-close" onclick="closeModal('screenshotModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <img id="modalScreenshotImg" src="" alt="Screenshot" style="width:100%;border-radius:8px;">
+                <div class="modal-screenshot-meta" id="modalScreenshotMeta"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('screenshotModal')">Close</button>
+                <button class="btn btn-primary admin-only-btn" onclick="approveBlock()" id="modalApproveBtn" style="display:none;">Approve</button>
+                <button class="btn btn-danger admin-only-btn" onclick="disputeBlock()" id="modalDisputeBtn" style="display:none;">Dispute</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toasts" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="activity.js"></script>
+    <script src="screenshot.js"></script>
+    <script src="timer.js"></script>
+    <script src="admin.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
