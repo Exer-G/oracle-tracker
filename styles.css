@@ -262,6 +262,10 @@ body {
 .btn-danger:hover { background: #DC2626; }
 .btn-sm { padding: 7px 12px; font-size: 12px; }
 .btn svg { width: 16px; height: 16px; }
+.btn-ghost { background: transparent; color: var(--text-muted); border: none; padding: 4px 6px; }
+.btn-ghost:hover { background: rgba(255,255,255,0.06); color: var(--danger); }
+.block-delete-btn { opacity: 0; transition: opacity 0.15s; margin-left: 4px; flex-shrink: 0; }
+.list-item:hover .block-delete-btn { opacity: 1; }
 
 /* Filter Tabs */
 .filter-tabs { display: flex; gap: 4px; }

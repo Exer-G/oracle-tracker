@@ -936,7 +936,7 @@ function renderMyTime(filter) {
     }
 
     list.innerHTML = filtered.map(b => `
-        <div class="list-item">
+        <div class="list-item" id="block-row-${b.id}">
             ${b.screenshot_url
                 ? `<img class="screenshot-thumb" src="${b.screenshot_url}" alt="Block" onclick="viewScreenshot('${b.screenshot_url}', ${b.block_number})">`
                 : `<div class="list-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>`
@@ -947,6 +947,9 @@ function renderMyTime(filter) {
             </div>
             <span class="badge ${getActivityBadgeClass(b.activity_percent)}">${b.activity_percent || 0}%</span>
             <div class="list-amount">${Math.round((b.duration_seconds || 0) / 60)}m</div>
+            <button class="btn btn-ghost btn-sm block-delete-btn" onclick="deleteMyBlock('${b.id}')" title="Remove this session" aria-label="Delete session">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
         </div>
     `).join('');
 }
@@ -1184,22 +1187,74 @@ async function confirmFreelancerDispute() {
             }
         }
 
-        // Update local cache
-        const block = timeBlocks.find(b => b.id === disputingBlockId);
-        if (block) {
-            block.status = 'disputed';
-            block.dispute_reason = disputeInfo;
-        }
+        // Remove from local cache so it disappears from the list immediately
+        const idx = timeBlocks.findIndex(b => b.id === disputingBlockId);
+        if (idx !== -1) timeBlocks.splice(idx, 1);
 
         closeModal('disputeModal');
-        toast('Timesheet disputed successfully', 'success');
+        toast('Timesheet disputed — entry removed from your list', 'success');
         disputingBlockId = null;
         renderMyTimesheets();
+        renderMyTime(currentFilter);
     } catch (err) {
         console.error('[Dispute] Error:', err);
         toast('Failed to dispute timesheet', 'error');
     }
 }
+
+// ============================================================
+// DELETE MY BLOCK (freelancer removes their own session)
+// ============================================================
+async function deleteMyBlock(blockId) {
+    if (!blockId || !currentTeamMember) return;
+
+    const block = timeBlocks.find(b => b.id === blockId);
+    if (!block) return;
+
+    // Only pending blocks can be deleted (approved = admin locked, disputed = already handled)
+    if (block.status === 'approved') {
+        toast('Approved sessions cannot be removed — contact your admin', 'error');
+        return;
+    }
+
+    const mins = Math.round((block.duration_seconds || 0) / 60);
+    const label = `${block.project_name || 'No Project'} — ${mins}m`;
+
+    const confirmed = window.confirm(`Remove this session?\n\n${label}\n\nThis cannot be undone.`);
+    if (!confirmed) return;
+
+    // Optimistic removal — animate out immediately
+    const row = document.getElementById(`block-row-${blockId}`);
+    if (row) {
+        row.style.transition = 'opacity 0.2s, transform 0.2s';
+        row.style.opacity = '0';
+        row.style.transform = 'translateX(12px)';
+    }
+
+    try {
+        const { error } = await supabaseClient
+            .from('tt_time_blocks')
+            .delete()
+            .eq('id', blockId)
+            .eq('user_id', currentTeamMember.id); // safety: can only delete own blocks
+
+        if (error) throw error;
+
+        // Remove from local cache
+        const idx = timeBlocks.findIndex(b => b.id === blockId);
+        if (idx !== -1) timeBlocks.splice(idx, 1);
+
+        toast('Session removed', 'success');
+        renderMyTime(currentFilter);
+        renderMyWeekly();
+    } catch (err) {
+        // Roll back the animation if delete failed
+        if (row) { row.style.opacity = ''; row.style.transform = ''; }
+        console.error('[DeleteBlock] Error:', err);
+        toast('Failed to remove session: ' + (err.message || 'Unknown error'), 'error');
+    }
+}
+window.deleteMyBlock = deleteMyBlock;
 
 // ============================================================
 // SETTINGS
