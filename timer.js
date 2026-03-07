@@ -50,7 +50,7 @@ class TimerEngine {
         this._saveState();
 
         if (this.onStateChange) this.onStateChange('running');
-        console.log('[Timer] Started session:', this.sessionId);
+        debug('[Timer] Started session:', this.sessionId);
     }
 
     stop() {
@@ -68,7 +68,7 @@ class TimerEngine {
         this._saveState();
 
         if (this.onStateChange) this.onStateChange('idle');
-        console.log('[Timer] Stopped. Blocks completed:', this.completedBlocks.length);
+        debug('[Timer] Stopped. Blocks completed:', this.completedBlocks.length);
     }
 
     reset() {
@@ -83,7 +83,7 @@ class TimerEngine {
         this._clearSavedState();
 
         if (this.onStateChange) this.onStateChange('idle');
-        console.log('[Timer] Reset');
+        debug('[Timer] Reset');
     }
 
     getElapsedSeconds() {
@@ -150,7 +150,7 @@ class TimerEngine {
             this._scheduleBlockEnd();
 
             if (this.onStateChange) this.onStateChange('running');
-            console.log('[Timer] Restored session. Missed blocks:', missedBlocks);
+            debug('[Timer] Restored session. Missed blocks:', missedBlocks);
             return true;
         } catch (err) {
             console.error('[Timer] Restore error:', err);
@@ -198,7 +198,7 @@ class TimerEngine {
             if (this.state === 'running' && !this.screenshotTaken) {
                 this.screenshotTaken = true;
                 if (this.onScreenshotNeeded) this.onScreenshotNeeded();
-                console.log('[Timer] Screenshot triggered for block', this.currentBlockNumber);
+                debug('[Timer] Screenshot triggered for block', this.currentBlockNumber);
             }
         }, adjustedDelay);
     }
@@ -251,7 +251,7 @@ class TimerEngine {
         }
 
         this._saveState();
-        console.log('[Timer] Block', block.blockNumber, 'completed.',
+        debug('[Timer] Block', block.blockNumber, 'completed.',
             isPartial ? '(partial)' : '',
             'Activity:', block.activityPercent + '%');
     }

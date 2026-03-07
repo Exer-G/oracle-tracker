@@ -20,7 +20,7 @@ async function loadTaskAllocations() {
 
         if (error) throw error;
         taskAllocations = data || [];
-        console.log('[Tasks] Loaded', taskAllocations.length, 'allocations');
+        debug('[Tasks] Loaded', taskAllocations.length, 'allocations');
     } catch (err) {
         console.error('[Tasks] Load error:', err);
         taskAllocations = [];
@@ -502,7 +502,7 @@ async function markAsOnboarded() {
                 .eq('email', currentTeamMember.email)
                 .eq('status', 'pending');
 
-            console.log('[Onboarding] Marked as onboarded:', currentTeamMember.name);
+            debug('[Onboarding] Marked as onboarded:', currentTeamMember.name);
         }
     } catch (err) {
         // Non-critical, silently fail

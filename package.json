@@ -1,7 +1,7 @@
 {
-  "name": "oracle-invoice-generator",
+  "name": "oracle-tracker",
   "version": "1.0.0",
-  "description": "Oracle Invoice Generator for Exergy Designs - Monochrome Business Intelligence Theme",
+  "description": "Oracle Tracker — time tracking platform for Exergy Designs",
   "private": true,
   "scripts": {
     "start": "npx serve ."

@@ -30,7 +30,7 @@ class ActivityTracker {
         document.addEventListener('click', this._onClick);
 
         this.sampleInterval = setInterval(() => this._sample(), TT_CONFIG.activitySampleInterval * 1000);
-        console.log('[Activity] Started tracking');
+        debug('[Activity] Started tracking');
     }
 
     stop() {
@@ -43,7 +43,7 @@ class ActivityTracker {
             clearInterval(this.sampleInterval);
             this.sampleInterval = null;
         }
-        console.log('[Activity] Stopped tracking');
+        debug('[Activity] Stopped tracking');
     }
 
     resetBlock() {

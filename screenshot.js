@@ -36,17 +36,17 @@ class ScreenshotCapture {
             // Listen for user manually stopping screen share
             const track = this.stream.getVideoTracks()[0];
             track.addEventListener('ended', () => {
-                console.log('[Screenshot] User stopped screen sharing');
+                debug('[Screenshot] User stopped screen sharing');
                 this.hasPermission = false;
                 this.stream = null;
                 this._updateCaptureStatus(false);
             });
 
             this._updateCaptureStatus(true);
-            console.log('[Screenshot] Permission granted');
+            debug('[Screenshot] Permission granted');
             return true;
         } catch (err) {
-            console.log('[Screenshot] Permission denied or error:', err.message);
+            debug('[Screenshot] Permission denied or error:', err.message);
             this.hasPermission = false;
             this._updateCaptureStatus(false);
             return false;
@@ -146,7 +146,7 @@ class ScreenshotCapture {
         this.hasPermission = false;
         this.lastScreenshot = null;
         this._updateCaptureStatus(false);
-        console.log('[Screenshot] Permission revoked');
+        debug('[Screenshot] Permission revoked');
     }
 
     _updateCaptureStatus(active) {
