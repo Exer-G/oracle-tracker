@@ -363,6 +363,7 @@ const PAGE_TITLES = {
     'timer': { title: 'Timer', subtitle: 'Track your work time' },
     'my-time': { title: 'My Time', subtitle: 'View your tracked time entries' },
     'my-weekly': { title: 'Weekly Summary', subtitle: 'Your weekly hours and earnings' },
+    'my-timesheets': { title: 'My Timesheets', subtitle: 'Review and dispute your timesheet entries' },
     'team-overview': { title: 'Team Overview', subtitle: 'Monitor team activity in real-time' },
     'time-review': { title: 'Time Review', subtitle: 'Review screenshots and approve time' },
     'weekly-reports': { title: 'Weekly Reports', subtitle: 'Team hours and costs by week' },
@@ -412,6 +413,9 @@ function navigateTo(page) {
             break;
         case 'my-weekly':
             renderMyWeekly();
+            break;
+        case 'my-timesheets':
+            renderMyTimesheets();
             break;
         case 'team-overview':
             if (typeof renderTeamOverview === 'function') renderTeamOverview();
@@ -1036,6 +1040,147 @@ function renderDailyBreakdown(blocks) {
     }
 
     container.innerHTML = html || '<div class="empty-state">No data for this week</div>';
+}
+
+// ============================================================
+// MY TIMESHEETS VIEW
+// ============================================================
+let currentTimesheetFilter = 'all';
+let disputingBlockId = null;
+
+function filterTimesheets(filter) {
+    currentTimesheetFilter = filter;
+    document.querySelectorAll('[data-tsfilter]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tsfilter === filter);
+    });
+    renderMyTimesheets();
+}
+
+function renderMyTimesheets() {
+    const myBlocks = timeBlocks.filter(b => b.user_id === currentTeamMember.id);
+
+    // Stats
+    const approved = myBlocks.filter(b => b.status === 'approved');
+    const pending = myBlocks.filter(b => b.status === 'pending');
+    const disputed = myBlocks.filter(b => b.status === 'disputed');
+
+    document.getElementById('tsApprovedCount').textContent = approved.length;
+    document.getElementById('tsPendingCount').textContent = pending.length;
+    document.getElementById('tsDisputedCount').textContent = disputed.length;
+
+    // Outstanding balance = approved + pending (exclude disputed)
+    const outstandingBlocks = myBlocks.filter(b => b.status !== 'disputed');
+    const outstandingSecs = outstandingBlocks.reduce((s, b) => s + (b.duration_seconds || 0), 0);
+    const outstandingBalance = calculateEarnings(outstandingSecs, currentTeamMember.hourlyRate);
+    document.getElementById('tsOutstandingBalance').textContent = formatCurrency(outstandingBalance, currentTeamMember.currency);
+
+    // Filter
+    let filtered;
+    if (currentTimesheetFilter === 'all') {
+        filtered = myBlocks;
+    } else {
+        filtered = myBlocks.filter(b => b.status === currentTimesheetFilter);
+    }
+
+    // Sort newest first
+    filtered.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+
+    const list = document.getElementById('tsTimesheetList');
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="empty-state">No timesheets found for this filter.</div>';
+        return;
+    }
+
+    list.innerHTML = filtered.map(b => {
+        const statusBadge = b.status === 'approved'
+            ? '<span class="badge badge-success">Approved</span>'
+            : b.status === 'disputed'
+                ? '<span class="badge badge-danger">Disputed</span>'
+                : '<span class="badge badge-warning">Pending</span>';
+
+        const activityClass = getActivityBadgeClass(b.activity_percent || 0);
+        const dateStr = new Date(b.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        const earnings = calculateEarnings(b.duration_seconds || 0, currentTeamMember.hourlyRate);
+
+        const canDispute = b.status === 'pending';
+
+        return `
+            <div class="list-item">
+                ${b.screenshot_url
+                    ? `<img class="screenshot-thumb" src="${b.screenshot_url}" alt="Block" onclick="viewScreenshot('${b.screenshot_url}', ${b.block_number})">`
+                    : `<div class="list-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>`
+                }
+                <div class="list-info">
+                    <div class="list-title">${escapeHtml(b.project_name || 'No Project')} ${b.memo ? '- ' + escapeHtml(b.memo) : ''}</div>
+                    <div class="list-meta">${dateStr} &middot; ${formatTimeRange(b.start_time, b.end_time)} &middot; Block ${b.block_number}</div>
+                </div>
+                <span class="badge ${activityClass}">${b.activity_percent || 0}%</span>
+                ${statusBadge}
+                <div class="list-amount">${formatCurrency(earnings, currentTeamMember.currency)}</div>
+                <div class="list-actions">
+                    ${canDispute ? `<button class="btn btn-danger btn-sm" onclick="openFreelancerDispute('${b.id}')">Dispute</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function openFreelancerDispute(blockId) {
+    disputingBlockId = blockId;
+    document.getElementById('disputeReason').value = '';
+    document.getElementById('disputeNotes').value = '';
+    openModal('disputeModal');
+}
+
+async function confirmFreelancerDispute() {
+    if (!disputingBlockId) return;
+
+    const reason = document.getElementById('disputeReason').value;
+    if (!reason) {
+        toast('Please select a reason for the dispute', 'error');
+        return;
+    }
+
+    const notes = document.getElementById('disputeNotes').value.trim();
+    const disputeInfo = reason + (notes ? ': ' + notes : '');
+
+    try {
+        const { error } = await supabaseClient
+            .from('tt_time_blocks')
+            .update({ status: 'disputed', dispute_reason: disputeInfo })
+            .eq('id', disputingBlockId)
+            .eq('user_id', currentTeamMember.id);
+
+        if (error) {
+            console.error('[Dispute] Update error:', error);
+            // Fallback: update without dispute_reason column if it doesn't exist
+            const { error: fallbackError } = await supabaseClient
+                .from('tt_time_blocks')
+                .update({ status: 'disputed' })
+                .eq('id', disputingBlockId)
+                .eq('user_id', currentTeamMember.id);
+
+            if (fallbackError) {
+                toast('Failed to dispute timesheet: ' + fallbackError.message, 'error');
+                return;
+            }
+        }
+
+        // Update local cache
+        const block = timeBlocks.find(b => b.id === disputingBlockId);
+        if (block) {
+            block.status = 'disputed';
+            block.dispute_reason = disputeInfo;
+        }
+
+        closeModal('disputeModal');
+        toast('Timesheet disputed successfully', 'success');
+        disputingBlockId = null;
+        renderMyTimesheets();
+    } catch (err) {
+        console.error('[Dispute] Error:', err);
+        toast('Failed to dispute timesheet', 'error');
+    }
 }
 
 // ============================================================

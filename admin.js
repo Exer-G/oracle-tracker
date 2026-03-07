@@ -25,8 +25,8 @@ function renderTeamOverview() {
         todaySecsByUser[b.user_id] = (todaySecsByUser[b.user_id] || 0) + (b.duration_seconds || 0);
     });
 
-    // This week's cost
-    const weekBlocks = timeBlocks.filter(b => isThisWeek(new Date(b.start_time)));
+    // This week's cost (exclude disputed blocks)
+    const weekBlocks = timeBlocks.filter(b => isThisWeek(new Date(b.start_time)) && b.status !== 'disputed');
     let weekCost = 0;
     weekBlocks.forEach(b => {
         const member = teamMembers.find(m => m.id === b.user_id);
@@ -257,17 +257,20 @@ function renderWeeklyReports() {
 
     freelancers.forEach(f => {
         const blocks = userBlocks[f.id] || [];
-        const totalSecs = blocks.reduce((s, b) => s + (b.duration_seconds || 0), 0);
+        // Exclude disputed blocks from hours, cost, and outstanding balance
+        const billableBlocks = blocks.filter(b => b.status !== 'disputed');
+        const totalSecs = billableBlocks.reduce((s, b) => s + (b.duration_seconds || 0), 0);
         const hours = totalSecs / 3600;
         const cost = hours * f.hourlyRate;
-        const avgActivity = blocks.length > 0
-            ? Math.round(blocks.reduce((s, b) => s + (b.activity_percent || 0), 0) / blocks.length)
+        const avgActivity = billableBlocks.length > 0
+            ? Math.round(billableBlocks.reduce((s, b) => s + (b.activity_percent || 0), 0) / billableBlocks.length)
             : 0;
 
         totalCost += cost;
         totalHours += hours;
 
         if (blocks.length === 0 && currentWeekOffset !== 0) return;
+        const billableCount = billableBlocks.length;
 
         const initials = f.name.split(' ').map(n => n[0]).join('').toUpperCase();
         const approved = blocks.filter(b => b.status === 'approved').length;
