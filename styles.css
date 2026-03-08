@@ -1036,3 +1036,62 @@ body {
     .screenshot-grid { grid-template-columns: 1fr; }
     .stats-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ============================================================
+   UTILITY CLASSES
+   Replaces scattered inline styles across JS templates
+   ============================================================ */
+
+/* Layout */
+.flex-align-gap-sm { display: flex; align-items: center; gap: 10px; }
+.flex-align-gap-xs { display: flex; align-items: center; gap: 6px; }
+
+/* Typography */
+.font-semibold { font-weight: 600; }
+.font-medium { font-weight: 500; }
+.text-meta { font-size: 12px; color: var(--grey-500); }
+.hours-label { font-size: 13px; font-weight: 500; }
+
+/* Badge modifier */
+.capitalize { text-transform: capitalize; }
+
+/* Opacity */
+.dimmed { opacity: 0.5; }
+
+/* Section divider (replaces inline-styled label rows) */
+.section-divider-label {
+    padding: 16px 20px 8px;
+    font-size: 12px;
+    color: var(--grey-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-top: 2px solid var(--grey-200);
+    margin-top: 8px;
+}
+
+/* Stats row spacing variant */
+.stats-row--spaced { margin-bottom: 20px; }
+
+/* Allocation summary line */
+.allocation-summary {
+    padding: 16px 0 12px;
+    font-size: 13px;
+    color: var(--grey-500);
+}
+
+/* Admin screenshot grid */
+.no-screenshot-placeholder {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: var(--grey-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--grey-400);
+    font-size: 12px;
+    border-bottom: 1px solid var(--grey-100);
+}
+
+.activity-bar--card { margin: 8px 0 4px; }
+
+.text-center { text-align: center; }

@@ -13,6 +13,7 @@ class ActivityTracker {
         this._windowKeyboard = 0;
         this._windowMouse = 0;
         this._windowClicks = 0;
+        this._mouseMoved = false; // throttle: one signal per sample window
         this.sampleInterval = null;
 
         this._onKeyDown = this._onKeyDown.bind(this);
@@ -55,6 +56,7 @@ class ActivityTracker {
         this._windowKeyboard = 0;
         this._windowMouse = 0;
         this._windowClicks = 0;
+        this._mouseMoved = false;
     }
 
     getBlockActivity() {
@@ -86,8 +88,12 @@ class ActivityTracker {
 
     _onMouseMove() {
         if (!this.isTracking) return;
-        this.mouseCount++;
-        this._windowMouse++;
+        // Throttle: only count one mouse-move signal per sample window
+        if (!this._mouseMoved) {
+            this._mouseMoved = true;
+            this.mouseCount++;
+            this._windowMouse++;
+        }
     }
 
     _onClick() {
@@ -105,10 +111,11 @@ class ActivityTracker {
             this.activeSamples++;
         }
 
-        // Reset window counters
+        // Reset window counters and mouse-move flag for next window
         this._windowKeyboard = 0;
         this._windowMouse = 0;
         this._windowClicks = 0;
+        this._mouseMoved = false;
     }
 }
 

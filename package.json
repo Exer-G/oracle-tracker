@@ -3,7 +3,14 @@
   "version": "1.0.0",
   "description": "Oracle Tracker — time tracking platform for Exergy Designs",
   "private": true,
+  "type": "module",
   "scripts": {
-    "start": "npx serve ."
+    "dev": "netlify dev",
+    "build": "node build-env.js",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "netlify-cli": "^17.0.0"
   }
 }

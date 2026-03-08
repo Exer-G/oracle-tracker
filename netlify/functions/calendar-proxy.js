@@ -1,9 +1,11 @@
 // Google Calendar API Proxy
 // Handles calendar requests with OAuth tokens
 
-exports.handler = async (event, context) => {
+const ALLOWED_ORIGIN = process.env.URL || 'http://localhost:8888';
+
+export async function handler(event) {
     const headers = {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Content-Type': 'application/json'
@@ -25,20 +27,20 @@ exports.handler = async (event, context) => {
 
         const accessToken = authHeader.replace('Bearer ', '');
         const params = event.queryStringParameters || {};
-        
+
         // Build Google Calendar API URL
         const calendarId = params.calendarId || 'primary';
         const baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
-        
+
         const queryParams = new URLSearchParams();
         if (params.timeMin) queryParams.append('timeMin', params.timeMin);
         if (params.timeMax) queryParams.append('timeMax', params.timeMax);
         if (params.maxResults) queryParams.append('maxResults', params.maxResults);
         queryParams.append('singleEvents', 'true');
         queryParams.append('orderBy', 'startTime');
-        
+
         const url = `${baseUrl}?${queryParams.toString()}`;
-        
+
         const response = await fetch(url, {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
@@ -52,7 +54,7 @@ exports.handler = async (event, context) => {
             return {
                 statusCode: response.status,
                 headers,
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     error: 'Calendar API request failed',
                     status: response.status,
                     details: error
@@ -61,7 +63,7 @@ exports.handler = async (event, context) => {
         }
 
         const data = await response.json();
-        
+
         return {
             statusCode: 200,
             headers,
@@ -76,4 +78,4 @@ exports.handler = async (event, context) => {
             body: JSON.stringify({ error: error.message })
         };
     }
-};
+}

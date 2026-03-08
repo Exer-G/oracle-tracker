@@ -125,7 +125,7 @@ function renderTaskAllocations() {
     const uniqueProjects = new Set(active.map(a => a.project_id)).size;
 
     html += `
-        <div class="stats-row" style="margin-bottom: 20px;">
+        <div class="stats-row stats-row--spaced">
             <div class="stat-card">
                 <div class="stat-value">${uniqueMembers}</div>
                 <div class="stat-label">Assigned Members</div>
@@ -150,11 +150,11 @@ function renderTaskAllocations() {
         html += `
             <div class="allocation-group">
                 <div class="allocation-group-header">
-                    <div style="display:flex;align-items:center;gap:10px;">
+                    <div class="flex-align-gap-sm">
                         <div class="team-avatar">${initials}</div>
                         <div>
-                            <div style="font-weight:600;">${escapeHtml(group.name)}</div>
-                            <div style="font-size:12px;color:var(--grey-500);">${memberHours.toFixed(0)}h/week allocated</div>
+                            <div class="font-semibold">${escapeHtml(group.name)}</div>
+                            <div class="text-meta">${memberHours.toFixed(0)}h/week allocated</div>
                         </div>
                     </div>
                 </div>
@@ -169,7 +169,7 @@ function renderTaskAllocations() {
 
     // Paused/completed
     if (paused.length > 0) {
-        html += `<div style="padding:16px 0 8px;font-size:12px;color:var(--grey-500);text-transform:uppercase;letter-spacing:0.5px;">Paused (${paused.length})</div>`;
+        html += `<div class="section-divider-label">Paused (${paused.length})</div>`;
         html += paused.map(a => renderAllocationRow(a, true)).join('');
     }
 
@@ -181,14 +181,14 @@ function renderAllocationRow(a, dimmed = false) {
     const priorityBadge = priorityColors[a.priority] || 'badge-neutral';
 
     return `
-        <div class="allocation-row" style="${dimmed ? 'opacity:0.5;' : ''}">
+        <div class="allocation-row${dimmed ? ' dimmed' : ''}">
             <div class="allocation-project">
-                <div style="font-weight:500;">${escapeHtml(a.project_name)}</div>
-                ${a.task_description ? `<div style="font-size:12px;color:var(--grey-500);">${escapeHtml(a.task_description)}</div>` : ''}
+                <div class="font-medium">${escapeHtml(a.project_name)}</div>
+                ${a.task_description ? `<div class="text-meta">${escapeHtml(a.task_description)}</div>` : ''}
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-                <span class="badge ${priorityBadge}" style="text-transform:capitalize;">${a.priority}</span>
-                <span style="font-size:13px;font-weight:500;">${a.hours_per_week}h/wk</span>
+            <div class="flex-align-gap-xs">
+                <span class="badge ${priorityBadge} capitalize">${a.priority}</span>
+                <span class="hours-label">${a.hours_per_week}h/wk</span>
             </div>
             <div class="allocation-actions">
                 <button class="btn btn-secondary btn-sm" onclick="editAllocation('${a.id}')">Edit</button>
@@ -209,7 +209,7 @@ function renderMyAllocations() {
     const totalHours = myAllocations.reduce((s, a) => s + parseFloat(a.hours_per_week || 0), 0);
 
     let html = `
-        <div style="padding:16px 0 12px;font-size:13px;color:var(--grey-500);">
+        <div class="allocation-summary">
             You have <strong>${myAllocations.length}</strong> active task${myAllocations.length !== 1 ? 's' : ''} totalling <strong>${totalHours.toFixed(0)}h/week</strong>.
         </div>
     `;
@@ -222,12 +222,12 @@ function renderMyAllocations() {
             return `
                 <div class="allocation-row">
                     <div class="allocation-project">
-                        <div style="font-weight:500;">${escapeHtml(a.project_name)}</div>
-                        ${a.task_description ? `<div style="font-size:12px;color:var(--grey-500);">${escapeHtml(a.task_description)}</div>` : ''}
+                        <div class="font-medium">${escapeHtml(a.project_name)}</div>
+                        ${a.task_description ? `<div class="text-meta">${escapeHtml(a.task_description)}</div>` : ''}
                     </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span class="badge ${priorityColors[a.priority] || 'badge-neutral'}" style="text-transform:capitalize;">${a.priority}</span>
-                        <span style="font-size:13px;font-weight:500;">${a.hours_per_week}h/wk</span>
+                    <div class="flex-align-gap-xs">
+                        <span class="badge ${priorityColors[a.priority] || 'badge-neutral'} capitalize">${a.priority}</span>
+                        <span class="hours-label">${a.hours_per_week}h/wk</span>
                     </div>
                 </div>
             `;
@@ -460,14 +460,14 @@ function renderOnboardingStatus() {
         return `
             <div class="onboarding-row">
                 <div class="onboarding-info">
-                    <div style="font-weight:500;">${escapeHtml(inv.name)}</div>
-                    <div style="font-size:12px;color:var(--grey-500);">${escapeHtml(inv.email)}</div>
+                    <div class="font-medium">${escapeHtml(inv.name)}</div>
+                    <div class="text-meta">${escapeHtml(inv.email)}</div>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;">
+                <div class="flex-align-gap-xs">
                     ${stationBadge}
                     ${statusBadge}
                 </div>
-                <div style="font-size:12px;color:var(--grey-500);">
+                <div class="text-meta">
                     ${new Date(inv.created_at).toLocaleDateString()}
                 </div>
             </div>

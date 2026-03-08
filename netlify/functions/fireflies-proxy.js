@@ -1,14 +1,12 @@
-/**
- * Netlify Function - Fireflies API Proxy
- * Bypasses CORS restrictions by proxying requests server-side
- */
+// Netlify Function - Fireflies API Proxy
+// Bypasses CORS restrictions by proxying requests server-side
 
-// API key from environment variable
+const ALLOWED_ORIGIN = process.env.URL || 'http://localhost:8888';
 const FIREFLIES_API_KEY = process.env.FIREFLIES_API_KEY || '';
 
-exports.handler = async (event) => {
+export async function handler(event) {
     const headers = {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Content-Type': 'application/json'
@@ -66,4 +64,4 @@ exports.handler = async (event) => {
             body: JSON.stringify({ error: 'Proxy error: ' + error.message })
         };
     }
-};
+}

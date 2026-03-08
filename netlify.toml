@@ -1,6 +1,6 @@
 [build]
   publish = "."
-  command = "echo 'Static site - no build required'"
+  command = "node build-env.js"
 
 [[headers]]
   for = "/*"

@@ -6,8 +6,12 @@ function debug(...args) {
     if (window.TT_DEBUG) console.log(...args);
 }
 
-const SUPABASE_URL = 'https://uaivaspunoceuzxkukmh.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVhaXZhc3B1bm9jZXV6eGt1a21oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkxMTc2MDEsImV4cCI6MjA4NDY5MzYwMX0.yasfPMw3fRyOawYXLNTtZhpxutFCBd70f1Cot3AVcFc';
+// Supabase credentials are injected at build time via env-config.js (gitignored).
+// For local dev: set SUPABASE_URL and SUPABASE_ANON_KEY in a .env file and run `npm run build`.
+// The anon key is safe to expose client-side per Supabase's design — row-level security
+// (RLS) enforces access control. Never commit the service_role key.
+const SUPABASE_URL = window.__ENV__?.SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = window.__ENV__?.SUPABASE_ANON_KEY || '';
 
 const TT_CONFIG = {
     blockDuration: 600,          // 10 minutes in seconds

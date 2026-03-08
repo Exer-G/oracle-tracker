@@ -131,12 +131,12 @@ function loadTimeReview() {
             <div class="screenshot-card" data-block-id="${b.id}">
                 ${b.screenshot_url
                     ? `<img src="${b.screenshot_url}" alt="Screenshot" onclick="viewScreenshotAdmin('${b.id}')">`
-                    : `<div style="width:100%;aspect-ratio:16/9;background:var(--grey-100);display:flex;align-items:center;justify-content:center;color:var(--grey-400);font-size:12px;border-bottom:1px solid var(--grey-100);">No Screenshot</div>`
+                    : `<div class="no-screenshot-placeholder">No Screenshot</div>`
                 }
                 <div class="screenshot-card-body">
                     <div class="screenshot-card-time">${formatTimeRange(b.start_time, b.end_time)}</div>
                     <div class="screenshot-card-project">${escapeHtml(b.user_name || '')} &middot; ${escapeHtml(b.project_name || 'No Project')}</div>
-                    <div class="activity-bar" style="margin:8px 0 4px;">
+                    <div class="activity-bar activity-bar--card">
                         <div class="activity-bar-fill ${activityPercent >= 60 ? '' : activityPercent >= 30 ? 'medium' : 'low'}" style="width:${activityPercent}%"></div>
                     </div>
                     <div class="screenshot-card-footer">
@@ -310,7 +310,7 @@ function renderWeeklyReports() {
                     </div>
                 </div>
                 <div class="report-cost">${formatCurrency(cost, f.currency)}</div>
-                <div style="text-align:center;">${statusBadge}</div>
+                <div class="text-center">${statusBadge}</div>
                 <div class="report-actions">
                     ${pending > 0 ? `<button class="btn btn-success btn-sm" onclick="approveAllForUser('${f.id}')">Approve All</button>` : ''}
                 </div>
@@ -347,9 +347,28 @@ async function approveAllForUser(userId) {
         new Date(b.start_time) <= weekEnd
     );
 
-    for (const block of pendingBlocks) {
-        await updateBlockStatus(block.id, 'approved');
+    if (pendingBlocks.length === 0) {
+        toast('No pending blocks to approve', 'success');
+        return;
     }
+
+    // Batch update in a single DB call instead of N round-trips
+    const { error } = await supabaseClient
+        .from('tt_time_blocks')
+        .update({ status: 'approved' })
+        .in('id', pendingBlocks.map(b => b.id));
+
+    if (error) {
+        console.error('[Admin] Batch approve error:', error);
+        toast('Failed to approve blocks: ' + error.message, 'error');
+        return;
+    }
+
+    // Update local cache
+    pendingBlocks.forEach(b => {
+        const cached = timeBlocks.find(t => t.id === b.id);
+        if (cached) cached.status = 'approved';
+    });
 
     toast(`Approved ${pendingBlocks.length} blocks`, 'success');
     renderWeeklyReports();
@@ -400,14 +419,14 @@ function renderTeamManagement() {
 
     if (inactive.length > 0) {
         list.innerHTML += `
-            <div style="padding:16px 20px;font-size:12px;color:var(--grey-500);text-transform:uppercase;letter-spacing:0.5px;border-top:2px solid var(--grey-200);margin-top:8px;">
+            <div class="section-divider-label">
                 Inactive Members (${inactive.length})
             </div>
         `;
         list.innerHTML += inactive.map(m => {
             const initials = m.name.split(' ').map(n => n[0]).join('').toUpperCase();
             return `
-                <div class="team-mgmt-row" style="opacity:0.5;">
+                <div class="team-mgmt-row dimmed">
                     <div class="team-avatar">${initials}</div>
                     <div class="team-mgmt-info">
                         <div class="team-mgmt-name">${escapeHtml(m.name)}</div>

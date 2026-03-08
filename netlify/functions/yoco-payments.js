@@ -1,9 +1,11 @@
 // Netlify Function: Fetch Yoco Payment History
 // Check payment statuses and sync
 
+const ALLOWED_ORIGIN = process.env.URL || 'http://localhost:8888';
+
 export async function handler(event) {
     const headers = {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Content-Type': 'application/json'

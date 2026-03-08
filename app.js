@@ -1,5 +1,6 @@
 // Oracle Time Tracker - Core Application
-// Auth, Navigation, State, Freelancer Views
+// Global state, initialization, navigation, timer UI, and freelancer views
+// Utilities → utils.js | Auth → auth.js | Data → data.js
 // ============================================================
 
 let supabaseClient = null;
@@ -11,9 +12,9 @@ let sessions = [];
 let currentFilter = 'today';
 let weeklyChart = null;
 let currentWeekOffset = 0;
-let teamMembers = []; // Loaded from Supabase (or fallback to TT_TEAM)
-let mergedProjects = []; // Merged TT_PROJECTS + Supabase projects
-let realtimeChannel = null; // Supabase realtime channel reference
+let teamMembers = [];
+let mergedProjects = [];
+let realtimeChannel = null;
 
 debug('[Tracker] Starting...');
 
@@ -23,6 +24,12 @@ debug('[Tracker] Starting...');
 document.addEventListener('DOMContentLoaded', () => {
     if (typeof window.supabase === 'undefined') {
         toast('Failed to load Supabase. Refresh the page.', 'error');
+        return;
+    }
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        toast('Supabase is not configured. Check environment variables.', 'error');
+        console.error('[Init] Missing SUPABASE_URL or SUPABASE_ANON_KEY. Run `npm run build` locally or set env vars in Netlify.');
         return;
     }
 
@@ -55,313 +62,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     setupNavigation();
+
+    // Close modal on overlay click
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-overlay') && e.target.classList.contains('active')) {
+            e.target.classList.remove('active');
+        }
+    });
 });
-
-// ============================================================
-// AUTH
-// ============================================================
-async function signInWithGoogle() {
-    try {
-        const { error } = await supabaseClient.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-                redirectTo: window.location.origin + window.location.pathname,
-                queryParams: { prompt: 'select_account' }
-            }
-        });
-        if (error) throw error;
-    } catch (err) {
-        console.error('[Auth] Sign in error:', err);
-        toast('Sign in failed: ' + err.message, 'error');
-    }
-}
-
-async function signOut() {
-    try {
-        // Stop timer if running
-        if (window.timerEngine?.state === 'running') {
-            window.timerEngine.stop();
-        }
-        if (window.screenshotCapture) {
-            window.screenshotCapture.revokePermission();
-        }
-        if (window.activityTracker) {
-            window.activityTracker.stop();
-        }
-
-        // Unsubscribe from realtime channel
-        if (realtimeChannel) {
-            await supabaseClient.removeChannel(realtimeChannel);
-            realtimeChannel = null;
-        }
-
-        await supabaseClient.auth.signOut();
-        showLogin();
-    } catch (err) {
-        console.error('[Auth] Sign out error:', err);
-    }
-}
-
-function showLogin() {
-    document.getElementById('loginScreen').classList.remove('hidden');
-    document.getElementById('app').classList.remove('visible');
-    document.getElementById('app').style.display = 'none';
-}
-
-function showApp() {
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('app').classList.add('visible');
-    document.getElementById('app').style.display = 'flex';
-}
-
-// ============================================================
-// APP INIT
-// ============================================================
-async function initializeApp() {
-    const email = currentUser.email?.toLowerCase();
-
-    // Load team from Supabase (fallback to config.js)
-    await loadTeamMembers();
-
-    // Determine role from loaded team (DB role only — no hardcoded bypass)
-    currentTeamMember = teamMembers.find(m => m.email.toLowerCase() === email);
-    isAdmin = currentTeamMember?.role === 'admin';
-
-    if (!currentTeamMember) {
-        toast('Your account is not registered in this team. Contact admin.', 'error');
-        return;
-    }
-
-    // Strip sensitive data for non-admins: freelancers should only see their own rate
-    if (!isAdmin) {
-        teamMembers = teamMembers.map(m => {
-            if (m.id === currentTeamMember.id) return m; // Keep own data
-            return { ...m, hourlyRate: 0, currency: '' }; // Strip other members' rates
-        });
-    }
-
-    // Update UI
-    showApp();
-    updateUserCard();
-    applyRoleViewport();
-    await populateProjectDropdowns();
-
-    // Sync any pending blocks from localStorage, then load data
-    await syncPendingBlocks();
-    await loadTimeBlocks();
-
-    // Setup timer callbacks
-    setupTimerCallbacks();
-
-    // Restore timer if was running
-    window.timerEngine.restore();
-    if (window.timerEngine.state === 'running') {
-        updateTimerUI();
-    }
-
-    // Setup realtime
-    setupRealtime();
-
-    // Navigate to default page
-    if (isAdmin) {
-        navigateTo('team-overview');
-    } else {
-        navigateTo('timer');
-    }
-
-    // Render settings
-    renderSettings();
-
-    debug('[App] Initialized as', isAdmin ? 'admin' : 'freelancer', '-', currentTeamMember.name);
-}
-
-function updateUserCard() {
-    const initials = currentTeamMember.name.split(' ').map(n => n[0]).join('').toUpperCase();
-    document.getElementById('userAvatar').textContent = initials;
-    document.getElementById('userName').textContent = currentTeamMember.name;
-    document.getElementById('userRole').textContent = isAdmin ? 'Admin' : 'Freelancer';
-}
-
-function applyRoleViewport() {
-    // Show/hide admin nav
-    document.querySelectorAll('.admin-nav').forEach(el => {
-        el.style.display = isAdmin ? 'block' : 'none';
-    });
-
-    // Show/hide freelancer nav
-    document.querySelectorAll('.freelancer-nav').forEach(el => {
-        el.style.display = isAdmin ? 'none' : 'block';
-    });
-
-    // Admin can also access freelancer views (add both)
-    if (isAdmin) {
-        document.querySelectorAll('.freelancer-nav').forEach(el => {
-            el.style.display = 'block';
-        });
-    }
-
-    // Admin-only buttons in modals
-    document.querySelectorAll('.admin-only-btn').forEach(el => {
-        el.style.display = isAdmin ? 'inline-flex' : 'none';
-    });
-}
-
-async function populateProjectDropdowns() {
-    // Merge hardcoded projects with Supabase projects table
-    let allProjects = [...TT_PROJECTS];
-
-    try {
-        if (supabaseClient) {
-            const { data } = await supabaseClient
-                .from('projects')
-                .select('id, name, status')
-                .eq('status', 'active')
-                .order('name');
-
-            if (data && data.length > 0) {
-                const existingIds = new Set(TT_PROJECTS.map(p => p.id));
-                const existingNames = new Set(TT_PROJECTS.map(p => p.name.toLowerCase()));
-                data.forEach(p => {
-                    if (!existingIds.has(p.id) && !existingNames.has(p.name.toLowerCase())) {
-                        allProjects.push({ id: p.id, name: p.name, client: '', status: p.status });
-                    }
-                });
-                debug('[Projects] Merged', data.length, 'Supabase projects with', TT_PROJECTS.length, 'local projects');
-            }
-        }
-    } catch (err) {
-        console.warn('[Projects] Could not load from Supabase, using local only:', err);
-    }
-
-    mergedProjects = allProjects;
-    const activeProjects = allProjects.filter(p => p.status === 'active');
-    const selects = ['trackerProject', 'reviewProject'];
-
-    selects.forEach(id => {
-        const select = document.getElementById(id);
-        if (!select) return;
-
-        // Keep first option
-        const firstOption = select.options[0];
-        select.innerHTML = '';
-        select.appendChild(firstOption);
-
-        activeProjects.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.id;
-            opt.textContent = p.name;
-            select.appendChild(opt);
-        });
-    });
-
-    // Populate freelancer dropdown for admin
-    const reviewFreelancer = document.getElementById('reviewFreelancer');
-    if (reviewFreelancer) {
-        const freelancers = teamMembers.filter(m => m.role === 'freelancer' && m.status === 'active');
-        freelancers.forEach(f => {
-            const opt = document.createElement('option');
-            opt.value = f.id;
-            opt.textContent = f.name;
-            reviewFreelancer.appendChild(opt);
-        });
-    }
-
-    // Set default date to today
-    const reviewDate = document.getElementById('reviewDate');
-    if (reviewDate) {
-        reviewDate.value = new Date().toISOString().split('T')[0];
-    }
-}
-
-// ============================================================
-// TEAM DATA (Supabase-backed with config.js fallback)
-// ============================================================
-async function loadTeamMembers() {
-    if (!supabaseClient) {
-        teamMembers = [...TT_TEAM];
-        return;
-    }
-
-    try {
-        const { data, error } = await supabaseClient
-            .from('tt_team_members')
-            .select('*')
-            .order('name');
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-            teamMembers = data.map(m => ({
-                id: m.id,
-                email: m.email,
-                name: m.name,
-                role: m.role,
-                title: m.title || '',
-                hourlyRate: parseFloat(m.hourly_rate) || 0,
-                currency: m.currency || 'USD',
-                status: m.status || 'active'
-            }));
-            debug('[Team] Loaded', teamMembers.length, 'members from Supabase');
-        } else {
-            teamMembers = [...TT_TEAM];
-            debug('[Team] No Supabase data, using config.js fallback');
-        }
-    } catch (err) {
-        console.error('[Team] Load error, using fallback:', err);
-        teamMembers = [...TT_TEAM];
-    }
-}
-
-async function saveTeamMember(member) {
-    if (!supabaseClient || !isAdmin) return { error: 'Unauthorized' };
-
-    try {
-        const row = {
-            id: member.id,
-            email: member.email,
-            name: member.name,
-            role: member.role || 'freelancer',
-            title: member.title || '',
-            hourly_rate: member.hourlyRate,
-            currency: member.currency || 'USD',
-            status: member.status || 'active',
-            updated_at: new Date().toISOString()
-        };
-
-        const { data, error } = await supabaseClient
-            .from('tt_team_members')
-            .upsert(row, { onConflict: 'id' })
-            .select();
-
-        if (error) throw error;
-
-        // Reload team
-        await loadTeamMembers();
-        return { data };
-    } catch (err) {
-        console.error('[Team] Save error:', err);
-        return { error: err.message };
-    }
-}
-
-async function deleteTeamMember(memberId) {
-    if (!supabaseClient || !isAdmin) return { error: 'Unauthorized' };
-
-    try {
-        const { error } = await supabaseClient
-            .from('tt_team_members')
-            .delete()
-            .eq('id', memberId);
-
-        if (error) throw error;
-
-        await loadTeamMembers();
-        return {};
-    } catch (err) {
-        console.error('[Team] Delete error:', err);
-        return { error: err.message };
-    }
-}
 
 // ============================================================
 // NAVIGATION
@@ -453,28 +161,22 @@ function setupTimerCallbacks() {
     const engine = window.timerEngine;
 
     engine.onTick = (data) => {
-        // Update display
         document.getElementById('trackerDisplay').textContent = formatTime(data.totalElapsed);
 
-        // Update block progress
         updateBlockProgress(data.blockProgress);
 
-        // Update block label
         const blockMin = Math.floor(data.blockElapsed / 60);
         const blockSec = data.blockElapsed % 60;
         document.getElementById('blockLabel').textContent =
             `10-minute block: ${blockMin}:${String(blockSec).padStart(2, '0')} / 10:00`;
 
-        // Update activity
         const activity = window.activityTracker?.getLivePercent() || 0;
         updateActivityDisplay(activity);
 
-        // Update session stats
         document.getElementById('sessionBlocks').textContent = data.completedBlocks;
         document.getElementById('sessionDuration').textContent = formatDuration(data.totalElapsed);
         document.getElementById('sessionActivity').textContent = activity + '%';
 
-        // Update header status
         updateHeaderStatus(true, data.blockNumber);
     };
 
@@ -507,7 +209,7 @@ function setupTimerCallbacks() {
         }
     };
 
-    engine.onStateChange = (state) => {
+    engine.onStateChange = () => {
         updateTimerUI();
     };
 }
@@ -516,16 +218,13 @@ async function toggleTimer() {
     const engine = window.timerEngine;
 
     if (engine.state === 'running') {
-        // Stop
         engine.stop();
         window.activityTracker.stop();
         window.screenshotCapture.stopPreviewUpdates();
-        // Don't revoke permission - user can restart
         updateTimerUI();
         updateHeaderStatus(false);
         toast('Timer stopped', 'success');
     } else {
-        // Start
         const projectId = document.getElementById('trackerProject').value;
         const memo = document.getElementById('trackerMemo').value;
 
@@ -534,17 +233,14 @@ async function toggleTimer() {
             return;
         }
 
-        // Request screen capture permission
         const hasCapture = await window.screenshotCapture.requestPermission();
         if (!hasCapture) {
             toast('Screen capture declined. Timer will run without screenshots.', 'error');
         }
 
-        // Start systems
         window.activityTracker.start();
         engine.start(projectId, memo);
 
-        // Start preview updates
         if (hasCapture) {
             window.screenshotCapture.startPreviewUpdates((frame) => {
                 updateScreenshotPreview(frame);
@@ -567,7 +263,6 @@ function resetTimer() {
     window.activityTracker.stop();
     window.screenshotCapture.revokePermission();
 
-    // Reset UI
     document.getElementById('trackerDisplay').textContent = '00:00:00';
     document.getElementById('blockLabel').textContent = '10-minute block: 0:00 / 10:00';
     document.getElementById('sessionBlocks').textContent = '0';
@@ -600,7 +295,6 @@ async function saveSession() {
     window.screenshotCapture.revokePermission();
     resetTimer();
 
-    // Reload time blocks
     await loadTimeBlocks();
 }
 
@@ -609,14 +303,11 @@ function updateTimerUI() {
     const isRunning = engine.state === 'running';
     const btn = document.getElementById('btnStartStop');
 
-    // Toggle play/stop icons
     document.getElementById('playIcon').style.display = isRunning ? 'none' : 'block';
     document.getElementById('stopIcon').style.display = isRunning ? 'block' : 'none';
 
-    // Button style
     btn.classList.toggle('running', isRunning);
 
-    // Status indicator
     const statusInline = document.getElementById('trackerStatusInline');
     if (statusInline) {
         const dot = statusInline.querySelector('.status-dot');
@@ -625,7 +316,6 @@ function updateTimerUI() {
         text.textContent = isRunning ? 'Running - Block ' + engine.currentBlockNumber : 'Stopped';
     }
 
-    // Restore project selection
     if (isRunning && engine.projectId) {
         document.getElementById('trackerProject').value = engine.projectId;
     }
@@ -633,7 +323,6 @@ function updateTimerUI() {
         document.getElementById('trackerMemo').value = engine.memo;
     }
 
-    // Disable inputs while running
     document.getElementById('trackerProject').disabled = isRunning;
     document.getElementById('trackerMemo').disabled = isRunning;
 }
@@ -725,167 +414,11 @@ function renderSessionBlocks() {
 }
 
 // ============================================================
-// DATA PERSISTENCE
-// ============================================================
-async function saveTimeBlock(block, screenshotUrl) {
-    if (!supabaseClient) return;
-
-    try {
-        const projectName = (mergedProjects.length > 0 ? mergedProjects : TT_PROJECTS).find(p => p.id === window.timerEngine.projectId)?.name || '';
-
-        const { error } = await supabaseClient.from('tt_time_blocks').insert({
-            user_id: currentTeamMember.id,
-            user_name: currentTeamMember.name,
-            user_email: currentTeamMember.email,
-            session_id: window.timerEngine.sessionId,
-            project_id: window.timerEngine.projectId,
-            project_name: projectName,
-            block_number: block.blockNumber,
-            start_time: new Date(block.startTime).toISOString(),
-            end_time: new Date(block.endTime).toISOString(),
-            duration_seconds: block.durationSeconds,
-            screenshot_url: screenshotUrl,
-            screenshot_taken_at: block.screenshotTime ? new Date(block.screenshotTime).toISOString() : null,
-            activity_percent: block.activityPercent,
-            activity_keyboard: block.activityKeyboard || 0,
-            activity_mouse: block.activityMouse || 0,
-            memo: window.timerEngine.memo,
-            hourly_rate: currentTeamMember.hourlyRate,
-            currency: currentTeamMember.currency,
-            status: 'pending'
-        });
-
-        if (error) {
-            console.error('[Data] Save block error:', error);
-            // Store locally for later sync
-            storeBlockLocally(block, screenshotUrl);
-        }
-    } catch (err) {
-        console.error('[Data] Save block error:', err);
-        storeBlockLocally(block, screenshotUrl);
-    }
-}
-
-function storeBlockLocally(block, screenshotUrl) {
-    try {
-        const pending = JSON.parse(localStorage.getItem('tt_pending_blocks') || '[]');
-        pending.push({
-            ...block,
-            screenshotUrl,
-            projectId: window.timerEngine?.projectId || '',
-            timestamp: Date.now()
-        });
-        localStorage.setItem('tt_pending_blocks', JSON.stringify(pending));
-        debug('[Data] Block stored locally for later sync (' + pending.length + ' pending)');
-    } catch (err) {
-        console.error('[Data] Local storage error:', err);
-    }
-}
-
-async function syncPendingBlocks() {
-    if (!supabaseClient || !currentTeamMember) return;
-
-    let pending;
-    try {
-        pending = JSON.parse(localStorage.getItem('tt_pending_blocks') || '[]');
-    } catch (parseErr) {
-        console.error('[Sync] Corrupted pending blocks in localStorage, clearing:', parseErr);
-        localStorage.removeItem('tt_pending_blocks');
-        return;
-    }
-    if (!pending.length) return;
-
-    debug('[Sync] Attempting to sync', pending.length, 'pending blocks...');
-    const failed = [];
-    let synced = 0;
-
-    for (const block of pending) {
-        try {
-            const projectName = (mergedProjects.length > 0 ? mergedProjects : TT_PROJECTS).find(p => p.id === block.projectId)?.name || block.projectName || '';
-            const { error } = await supabaseClient.from('tt_time_blocks').insert({
-                user_id: currentTeamMember.id,
-                user_name: currentTeamMember.name,
-                user_email: currentTeamMember.email,
-                session_id: block.sessionId || '',
-                project_id: block.projectId || '',
-                project_name: projectName,
-                block_number: block.blockNumber || 0,
-                start_time: block.startTime ? new Date(block.startTime).toISOString() : new Date(block.timestamp).toISOString(),
-                end_time: block.endTime ? new Date(block.endTime).toISOString() : new Date(block.timestamp + (block.durationSeconds || 600) * 1000).toISOString(),
-                duration_seconds: block.durationSeconds || 600,
-                screenshot_url: block.screenshotUrl || null,
-                activity_percent: block.activityPercent || 0,
-                activity_keyboard: block.activityKeyboard || 0,
-                activity_mouse: block.activityMouse || 0,
-                memo: block.memo || '',
-                hourly_rate: currentTeamMember.hourlyRate || 0,
-                currency: currentTeamMember.currency || 'USD',
-                status: 'pending'
-            });
-
-            if (error) {
-                console.warn('[Sync] Block failed:', error.message);
-                failed.push(block);
-            } else {
-                synced++;
-            }
-        } catch (err) {
-            console.warn('[Sync] Block exception:', err);
-            failed.push(block);
-        }
-    }
-
-    localStorage.setItem('tt_pending_blocks', JSON.stringify(failed));
-    if (synced > 0) {
-        debug('[Sync] Synced', synced, 'pending blocks.', failed.length, 'remaining.');
-        toast('Synced ' + synced + ' pending time blocks', 'success');
-        await loadTimeBlocks();
-    }
-    if (failed.length > 0) {
-        console.warn('[Sync]', failed.length, 'blocks still pending (auth or RLS issue)');
-    }
-}
-
-async function loadTimeBlocks() {
-    if (!supabaseClient || !currentTeamMember) return;
-
-    try {
-        let query = supabaseClient
-            .from('tt_time_blocks')
-            .select('*')
-            .order('start_time', { ascending: false });
-
-        // Freelancers only see their own
-        if (!isAdmin) {
-            query = query.eq('user_id', currentTeamMember.id);
-        }
-
-        // Limit to last 30 days
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        query = query.gte('start_time', thirtyDaysAgo.toISOString());
-
-        const { data, error } = await query.limit(500);
-
-        if (error) {
-            console.error('[Data] Load blocks error:', error);
-            return;
-        }
-
-        timeBlocks = data || [];
-        debug('[Data] Loaded', timeBlocks.length, 'time blocks');
-    } catch (err) {
-        console.error('[Data] Load error:', err);
-    }
-}
-
-// ============================================================
 // MY TIME VIEW
 // ============================================================
 function filterMyTime(filter) {
     currentFilter = filter;
 
-    // Update active filter button
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.filter === filter);
     });
@@ -895,7 +428,6 @@ function filterMyTime(filter) {
 
 function renderMyTime(filter) {
     const myBlocks = timeBlocks.filter(b => b.user_id === currentTeamMember.id);
-    const now = new Date();
     let filtered;
 
     switch (filter) {
@@ -928,7 +460,6 @@ function renderMyTime(filter) {
     document.getElementById('myActivityAvg').textContent = avgActivity + '%';
     document.getElementById('myEarnings').textContent = formatCurrency(earnings, currentTeamMember.currency);
 
-    // Render list
     const list = document.getElementById('myTimeList');
     if (filtered.length === 0) {
         list.innerHTML = '<div class="empty-state">No time entries for this period.</div>';
@@ -942,7 +473,7 @@ function renderMyTime(filter) {
                 : `<div class="list-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>`
             }
             <div class="list-info">
-                <div class="list-title">${b.project_name || 'No Project'} ${b.memo ? '- ' + escapeHtml(b.memo) : ''}</div>
+                <div class="list-title">${escapeHtml(b.project_name || 'No Project')}${b.memo ? ' - ' + escapeHtml(b.memo) : ''}</div>
                 <div class="list-meta">${formatTimeRange(b.start_time, b.end_time)} &middot; Block ${b.block_number}</div>
             </div>
             <span class="badge ${getActivityBadgeClass(b.activity_percent)}">${b.activity_percent || 0}%</span>
@@ -960,7 +491,6 @@ function renderMyTime(filter) {
 function renderMyWeekly() {
     const myBlocks = timeBlocks.filter(b => b.user_id === currentTeamMember.id && isThisWeek(new Date(b.start_time)));
     const totalSecs = myBlocks.reduce((s, b) => s + (b.duration_seconds || 0), 0);
-    const totalHours = totalSecs / 3600;
     const earnings = calculateEarnings(totalSecs, currentTeamMember.hourlyRate);
     const avgActivity = myBlocks.length > 0
         ? Math.round(myBlocks.reduce((s, b) => s + (b.activity_percent || 0), 0) / myBlocks.length)
@@ -971,10 +501,7 @@ function renderMyWeekly() {
     document.getElementById('weeklyActivity').textContent = avgActivity + '%';
     document.getElementById('weeklyBlocks').textContent = myBlocks.length;
 
-    // Chart
     renderWeeklyChart(myBlocks);
-
-    // Daily breakdown
     renderDailyBreakdown(myBlocks);
 }
 
@@ -1009,9 +536,7 @@ function renderWeeklyChart(blocks) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-            },
+            plugins: { legend: { display: false } },
             scales: {
                 y: {
                     beginAtZero: true,
@@ -1080,7 +605,6 @@ function filterTimesheets(filter) {
 function renderMyTimesheets() {
     const myBlocks = timeBlocks.filter(b => b.user_id === currentTeamMember.id);
 
-    // Stats
     const approved = myBlocks.filter(b => b.status === 'approved');
     const pending = myBlocks.filter(b => b.status === 'pending');
     const disputed = myBlocks.filter(b => b.status === 'disputed');
@@ -1089,13 +613,11 @@ function renderMyTimesheets() {
     document.getElementById('tsPendingCount').textContent = pending.length;
     document.getElementById('tsDisputedCount').textContent = disputed.length;
 
-    // Outstanding balance = approved + pending (exclude disputed)
     const outstandingBlocks = myBlocks.filter(b => b.status !== 'disputed');
     const outstandingSecs = outstandingBlocks.reduce((s, b) => s + (b.duration_seconds || 0), 0);
     const outstandingBalance = calculateEarnings(outstandingSecs, currentTeamMember.hourlyRate);
     document.getElementById('tsOutstandingBalance').textContent = formatCurrency(outstandingBalance, currentTeamMember.currency);
 
-    // Filter
     let filtered;
     if (currentTimesheetFilter === 'all') {
         filtered = myBlocks;
@@ -1103,7 +625,6 @@ function renderMyTimesheets() {
         filtered = myBlocks.filter(b => b.status === currentTimesheetFilter);
     }
 
-    // Sort newest first
     filtered.sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
 
     const list = document.getElementById('tsTimesheetList');
@@ -1122,7 +643,6 @@ function renderMyTimesheets() {
         const activityClass = getActivityBadgeClass(b.activity_percent || 0);
         const dateStr = new Date(b.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
         const earnings = calculateEarnings(b.duration_seconds || 0, currentTeamMember.hourlyRate);
-
         const canDispute = b.status === 'pending';
 
         return `
@@ -1132,7 +652,7 @@ function renderMyTimesheets() {
                     : `<div class="list-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>`
                 }
                 <div class="list-info">
-                    <div class="list-title">${escapeHtml(b.project_name || 'No Project')} ${b.memo ? '- ' + escapeHtml(b.memo) : ''}</div>
+                    <div class="list-title">${escapeHtml(b.project_name || 'No Project')}${b.memo ? ' - ' + escapeHtml(b.memo) : ''}</div>
                     <div class="list-meta">${dateStr} &middot; ${formatTimeRange(b.start_time, b.end_time)} &middot; Block ${b.block_number}</div>
                 </div>
                 <span class="badge ${activityClass}">${b.activity_percent || 0}%</span>
@@ -1173,7 +693,6 @@ async function confirmFreelancerDispute() {
             .eq('user_id', currentTeamMember.id);
 
         if (error) {
-            console.error('[Dispute] Update error:', error);
             // Fallback: update without dispute_reason column if it doesn't exist
             const { error: fallbackError } = await supabaseClient
                 .from('tt_time_blocks')
@@ -1187,7 +706,6 @@ async function confirmFreelancerDispute() {
             }
         }
 
-        // Remove from local cache so it disappears from the list immediately
         const idx = timeBlocks.findIndex(b => b.id === disputingBlockId);
         if (idx !== -1) timeBlocks.splice(idx, 1);
 
@@ -1203,7 +721,7 @@ async function confirmFreelancerDispute() {
 }
 
 // ============================================================
-// DELETE MY BLOCK (freelancer removes their own session)
+// DELETE MY BLOCK
 // ============================================================
 async function deleteMyBlock(blockId) {
     if (!blockId || !currentTeamMember) return;
@@ -1211,19 +729,17 @@ async function deleteMyBlock(blockId) {
     const block = timeBlocks.find(b => b.id === blockId);
     if (!block) return;
 
-    // Only pending blocks can be deleted (approved = admin locked, disputed = already handled)
     if (block.status === 'approved') {
         toast('Approved sessions cannot be removed — contact your admin', 'error');
         return;
     }
 
     const mins = Math.round((block.duration_seconds || 0) / 60);
-    const label = `${block.project_name || 'No Project'} — ${mins}m`;
+    const label = `${escapeHtml(block.project_name || 'No Project')} — ${mins}m`;
 
     const confirmed = window.confirm(`Remove this session?\n\n${label}\n\nThis cannot be undone.`);
     if (!confirmed) return;
 
-    // Optimistic removal — animate out immediately
     const row = document.getElementById(`block-row-${blockId}`);
     if (row) {
         row.style.transition = 'opacity 0.2s, transform 0.2s';
@@ -1236,11 +752,10 @@ async function deleteMyBlock(blockId) {
             .from('tt_time_blocks')
             .delete()
             .eq('id', blockId)
-            .eq('user_id', currentTeamMember.id); // safety: can only delete own blocks
+            .eq('user_id', currentTeamMember.id);
 
         if (error) throw error;
 
-        // Remove from local cache
         const idx = timeBlocks.findIndex(b => b.id === blockId);
         if (idx !== -1) timeBlocks.splice(idx, 1);
 
@@ -1248,7 +763,6 @@ async function deleteMyBlock(blockId) {
         renderMyTime(currentFilter);
         renderMyWeekly();
     } catch (err) {
-        // Roll back the animation if delete failed
         if (row) { row.style.opacity = ''; row.style.transform = ''; }
         console.error('[DeleteBlock] Error:', err);
         toast('Failed to remove session: ' + (err.message || 'Unknown error'), 'error');
@@ -1275,28 +789,12 @@ function viewScreenshot(url, blockNumber) {
     openModal('screenshotModal');
 }
 
-function openModal(id) {
-    document.getElementById(id)?.classList.add('active');
-}
-
-function closeModal(id) {
-    document.getElementById(id)?.classList.remove('active');
-}
-
-// Close modal on overlay click
-document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('modal-overlay') && e.target.classList.contains('active')) {
-        e.target.classList.remove('active');
-    }
-});
-
 // ============================================================
 // REALTIME
 // ============================================================
 function setupRealtime() {
     if (!supabaseClient) return;
 
-    // Clean up any existing channel before subscribing
     if (realtimeChannel) {
         supabaseClient.removeChannel(realtimeChannel);
         realtimeChannel = null;
@@ -1308,11 +806,9 @@ function setupRealtime() {
             { event: 'INSERT', schema: 'public', table: 'tt_time_blocks' },
             (payload) => {
                 const newBlock = payload.new;
-                // Add if not already present
                 if (!timeBlocks.find(b => b.id === newBlock.id)) {
                     timeBlocks.unshift(newBlock);
                 }
-                // Refresh admin views
                 if (isAdmin && typeof renderTeamOverview === 'function') {
                     renderTeamOverview();
                 }
@@ -1320,146 +816,3 @@ function setupRealtime() {
         )
         .subscribe();
 }
-
-// ============================================================
-// UTILITY FUNCTIONS
-// ============================================================
-function formatTime(totalSeconds) {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-function formatDuration(totalSeconds) {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
-}
-
-function formatTimeRange(start, end) {
-    const s = new Date(start);
-    const e = new Date(end);
-    const opts = { hour: 'numeric', minute: '2-digit', hour12: true };
-    return s.toLocaleTimeString('en-US', opts) + ' - ' + e.toLocaleTimeString('en-US', opts);
-}
-
-function formatCurrency(amount, currency) {
-    if (currency === 'ZAR') return 'R' + amount.toFixed(0);
-    return '$' + amount.toFixed(2);
-}
-
-function calculateEarnings(totalSeconds, hourlyRate) {
-    return (totalSeconds / 3600) * hourlyRate;
-}
-
-function isToday(date) {
-    const today = new Date();
-    return date.toDateString() === today.toDateString();
-}
-
-function isThisWeek(date) {
-    const weekStart = getWeekStart(new Date());
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 7);
-    return date >= weekStart && date < weekEnd;
-}
-
-function isThisMonth(date) {
-    const now = new Date();
-    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-}
-
-function getWeekStart(date, offset = 0) {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : TT_CONFIG.weekStartDay);
-    d.setDate(diff + (offset * 7));
-    d.setHours(0, 0, 0, 0);
-    return d;
-}
-
-function getWeekEnd(weekStart) {
-    const end = new Date(weekStart);
-    end.setDate(end.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-    return end;
-}
-
-function getActivityBadgeClass(percent) {
-    if (percent >= 60) return 'badge-success';
-    if (percent >= 30) return 'badge-warning';
-    return 'badge-danger';
-}
-
-function escapeHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
-
-function toast(message, type = '') {
-    const container = document.getElementById('toasts');
-    if (!container) return;
-
-    const el = document.createElement('div');
-    el.className = 'toast' + (type ? ' ' + type : '');
-    el.textContent = message;
-    container.appendChild(el);
-
-    setTimeout(() => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(10px)';
-        el.style.transition = 'all 0.2s';
-        setTimeout(() => el.remove(), 200);
-    }, 3500);
-}
-
-// ============================================================
-// SYNC PROJECTS & ALLOCATIONS
-// ============================================================
-async function syncProjectsAndAllocations() {
-    if (!supabaseClient) {
-        toast('Not connected to Supabase', 'error');
-        return;
-    }
-
-    try {
-        // Sync projects from Supabase
-        const { data: supaProjects } = await supabaseClient
-            .from('projects')
-            .select('id, name, status, hourly_rate, source, description')
-            .order('name');
-
-        if (supaProjects && supaProjects.length > 0) {
-            const existingNames = new Set(TT_PROJECTS.map(p => p.name.toLowerCase()));
-            mergedProjects = [...TT_PROJECTS, ...supaProjects.filter(p => !existingNames.has(p.name.toLowerCase())).map(p => ({
-                id: p.id, name: p.name, client: '', status: p.status || 'active'
-            }))];
-            await populateProjectDropdowns();
-        }
-
-        // Sync team members
-        const { data: supaTeam } = await supabaseClient
-            .from('tt_team_members')
-            .select('*')
-            .order('name');
-
-        if (supaTeam && supaTeam.length > 0) {
-            teamMembers = supaTeam.map(m => ({
-                id: m.id, email: m.email, name: m.name, role: m.role,
-                title: m.title || '', hourlyRate: parseFloat(m.hourly_rate) || 0,
-                currency: m.currency || 'USD', status: m.status || 'active'
-            }));
-        }
-
-        toast('Synced projects & team data', 'success');
-    } catch (err) {
-        console.error('[Sync] Error:', err);
-        toast('Sync failed: ' + err.message, 'error');
-    }
-}
-
-window.syncProjectsAndAllocations = syncProjectsAndAllocations;

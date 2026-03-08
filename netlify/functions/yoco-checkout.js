@@ -1,9 +1,11 @@
 // Netlify Function: Create Yoco Checkout Session
 // Generates payment links for invoices via Yoco Payments API
 
+const ALLOWED_ORIGIN = process.env.URL || 'http://localhost:8888';
+
 export async function handler(event) {
     const headers = {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Content-Type': 'application/json'
@@ -35,7 +37,7 @@ export async function handler(event) {
 
         // Yoco expects amount in cents (ZAR)
         const amountInCents = Math.round(amount * 100);
-        const siteUrl = process.env.URL || 'https://hiengineer.app';
+        const siteUrl = process.env.URL || 'http://localhost:8888';
 
         const response = await fetch('https://payments.yoco.com/api/checkouts', {
             method: 'POST',

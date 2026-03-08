@@ -82,14 +82,20 @@ class ScreenshotCapture {
     }
 
     async uploadToStorage(supabaseClient, userId, sessionId, blockNumber) {
-        if (!this.lastScreenshot) return null;
+        if (!this.lastScreenshot || !this.canvas) return null;
 
         try {
             const filePath = `${userId}/${sessionId}/${blockNumber}.jpg`;
+            const quality = parseFloat(document.getElementById('settingsQuality')?.value) || TT_CONFIG.screenshotQuality;
 
-            // Convert base64 to blob
-            const response = await fetch(this.lastScreenshot);
-            const blob = await response.blob();
+            // Use canvas.toBlob() directly — avoids round-tripping base64 through fetch
+            const blob = await new Promise((resolve, reject) => {
+                this.canvas.toBlob(
+                    b => (b ? resolve(b) : reject(new Error('canvas.toBlob returned null'))),
+                    'image/jpeg',
+                    quality
+                );
+            });
 
             const { data, error } = await supabaseClient.storage
                 .from(TT_CONFIG.storageBucket)
