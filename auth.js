@@ -106,7 +106,7 @@ async function initializeApp() {
 
     // Navigate to default page
     if (isAdmin) {
-        navigateTo('team-overview');
+        navigateTo('projects');
     } else {
         navigateTo('timer');
     }

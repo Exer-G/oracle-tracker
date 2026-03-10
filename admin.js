@@ -1,83 +1,8 @@
 // Oracle Time Tracker - Admin Dashboard
-// Team Overview, Time Review (Work Diary), Weekly Reports
+// Projects, Time Review (Work Diary), Weekly Reports
 // ============================================================
 
 let currentReviewBlockId = null;
-
-// ============================================================
-// TEAM OVERVIEW
-// ============================================================
-function renderTeamOverview() {
-    const freelancers = teamMembers.filter(m => m.role === 'freelancer' && m.status === 'active');
-    const today = new Date();
-
-    // Count currently tracking (check for recent blocks in last 15 min)
-    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
-    const recentBlocks = timeBlocks.filter(b =>
-        new Date(b.end_time) >= fifteenMinsAgo
-    );
-    const trackingUsers = [...new Set(recentBlocks.map(b => b.user_id))];
-
-    // Today's blocks per user
-    const todayBlocks = timeBlocks.filter(b => isToday(new Date(b.start_time)));
-    const todaySecsByUser = {};
-    todayBlocks.forEach(b => {
-        todaySecsByUser[b.user_id] = (todaySecsByUser[b.user_id] || 0) + (b.duration_seconds || 0);
-    });
-
-    // This week's cost (exclude disputed and removed blocks)
-    const weekBlocks = timeBlocks.filter(b => isThisWeek(new Date(b.start_time)) && b.status !== 'disputed' && b.status !== 'removed');
-    let weekCost = 0;
-    weekBlocks.forEach(b => {
-        const member = teamMembers.find(m => m.id === b.user_id);
-        if (member) {
-            const hours = (b.duration_seconds || 0) / 3600;
-            weekCost += hours * member.hourlyRate;
-        }
-    });
-
-    const teamTodayHours = Object.values(todaySecsByUser).reduce((s, v) => s + v, 0);
-
-    // Update stats
-    document.getElementById('totalFreelancers').textContent = freelancers.length;
-    document.getElementById('currentlyTracking').textContent = trackingUsers.length;
-    document.getElementById('teamTodayHours').textContent = formatDuration(teamTodayHours);
-    document.getElementById('teamWeekCost').textContent = '$' + weekCost.toFixed(0);
-
-    // Update badge
-    const badge = document.getElementById('teamOnlineBadge');
-    if (badge) badge.textContent = trackingUsers.length;
-
-    // Render team list
-    const list = document.getElementById('teamList');
-    list.innerHTML = freelancers.map(f => {
-        const isTracking = trackingUsers.includes(f.id);
-        const todaySecs = todaySecsByUser[f.id] || 0;
-        const initials = f.name.split(' ').map(n => n[0]).join('').toUpperCase();
-
-        // Find the most recent block to get project info
-        const lastBlock = todayBlocks
-            .filter(b => b.user_id === f.id)
-            .sort((a, b) => new Date(b.end_time) - new Date(a.end_time))[0];
-
-        const currentProject = lastBlock?.project_name || 'No activity today';
-
-        return `
-            <div class="team-member">
-                <div class="team-avatar">${initials}</div>
-                <div class="team-info">
-                    <div class="team-name">${escapeHtml(f.name)}</div>
-                    <div class="team-project">${escapeHtml(currentProject)}</div>
-                </div>
-                <div class="team-status">
-                    <span class="status-dot ${isTracking ? 'running' : ''}"></span>
-                    <span class="badge ${isTracking ? 'badge-success' : 'badge-neutral'}">${isTracking ? 'Tracking' : 'Offline'}</span>
-                </div>
-                <div class="team-hours">${formatDuration(todaySecs)}</div>
-            </div>
-        `;
-    }).join('');
-}
 
 // ============================================================
 // TIME REVIEW (Work Diary)
@@ -596,40 +521,54 @@ function renderProjectManagement() {
     if (!list) return;
 
     const countEl = document.getElementById('projectCount');
-    if (countEl) countEl.textContent = active.length + ' active';
+    if (countEl) countEl.textContent = active.length + ' active' + (inactive.length ? ', ' + inactive.length + ' inactive' : '');
 
     if (active.length === 0) {
         list.innerHTML = '<div class="empty-state">No active projects. Add one above.</div>';
         return;
     }
 
-    // Calculate hours tracked per project (all time)
-    const projectHours = {};
+    // Calculate hours and cost tracked per project (all time, billable only)
+    const projectStats = {};
     timeBlocks.forEach(b => {
         if (b.status === 'removed' || b.status === 'disputed') return;
         const key = b.project_id || b.project_name || '';
-        projectHours[key] = (projectHours[key] || 0) + (b.duration_seconds || 0);
+        if (!projectStats[key]) projectStats[key] = { secs: 0, cost: 0, blocks: 0 };
+        projectStats[key].secs += (b.duration_seconds || 0);
+        projectStats[key].blocks += 1;
+        const member = teamMembers.find(m => m.id === b.user_id);
+        const rate = member ? member.hourlyRate : (b.hourly_rate || 0);
+        projectStats[key].cost += ((b.duration_seconds || 0) / 3600) * rate;
     });
 
-    list.innerHTML = active.map(p => {
-        const secs = projectHours[p.id] || projectHours[p.name] || 0;
-        const hours = (secs / 3600).toFixed(1);
+    let html = active.map(p => {
+        const stats = projectStats[p.id] || projectStats[p.name] || { secs: 0, cost: 0, blocks: 0 };
+        const hours = (stats.secs / 3600).toFixed(1);
 
         return `
-            <div class="team-mgmt-row">
-                <div class="team-avatar" style="background:var(--grey-100);color:var(--grey-700);font-size:11px;">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <div class="project-tile">
+                <div class="project-tile-header">
+                    <div>
+                        <div class="project-tile-name">${escapeHtml(p.name)}</div>
+                        ${p.client || p.description ? `<div class="project-tile-client">${escapeHtml(p.client || p.description)}</div>` : ''}
+                    </div>
+                    <span class="badge badge-success">Active</span>
                 </div>
-                <div class="team-mgmt-info">
-                    <div class="team-mgmt-name">${escapeHtml(p.name)}</div>
-                    <div class="team-mgmt-email">${escapeHtml(p.client || p.description || '')}</div>
+                <div class="project-tile-stats">
+                    <div class="project-tile-stat">
+                        <div class="project-tile-stat-value">${hours}h</div>
+                        <div class="project-tile-stat-label">Hours</div>
+                    </div>
+                    <div class="project-tile-stat">
+                        <div class="project-tile-stat-value">${stats.blocks}</div>
+                        <div class="project-tile-stat-label">Blocks</div>
+                    </div>
+                    <div class="project-tile-stat">
+                        <div class="project-tile-stat-value">$${stats.cost.toFixed(0)}</div>
+                        <div class="project-tile-stat-label">Cost</div>
+                    </div>
                 </div>
-                <div class="team-mgmt-rate">
-                    <span class="rate-value">${hours}h</span>
-                    <span class="rate-currency">tracked</span>
-                </div>
-                <span class="badge badge-success">Active</span>
-                <div class="team-mgmt-actions">
+                <div class="project-tile-actions">
                     <button class="btn btn-danger btn-sm" onclick="deactivateProject('${p.id}', '${escapeHtml(p.name)}')">Remove</button>
                 </div>
             </div>
@@ -637,23 +576,23 @@ function renderProjectManagement() {
     }).join('');
 
     if (inactive.length > 0) {
-        list.innerHTML += '<div class="section-divider-label">Inactive Projects (' + inactive.length + ')</div>';
-        list.innerHTML += inactive.map(p => `
-            <div class="team-mgmt-row dimmed">
-                <div class="team-avatar" style="background:var(--grey-100);color:var(--grey-400);font-size:11px;">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+        html += inactive.map(p => `
+            <div class="project-tile dimmed">
+                <div class="project-tile-header">
+                    <div>
+                        <div class="project-tile-name">${escapeHtml(p.name)}</div>
+                        ${p.client || p.description ? `<div class="project-tile-client">${escapeHtml(p.client || p.description)}</div>` : ''}
+                    </div>
+                    <span class="badge badge-neutral">Inactive</span>
                 </div>
-                <div class="team-mgmt-info">
-                    <div class="team-mgmt-name">${escapeHtml(p.name)}</div>
-                    <div class="team-mgmt-email">${escapeHtml(p.client || p.description || '')}</div>
-                </div>
-                <span class="badge badge-neutral">Inactive</span>
-                <div class="team-mgmt-actions">
+                <div class="project-tile-actions">
                     <button class="btn btn-secondary btn-sm" onclick="reactivateProject('${p.id}')">Reactivate</button>
                 </div>
             </div>
         `).join('');
     }
+
+    list.innerHTML = html;
 }
 
 function openAddProjectModal() {

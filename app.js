@@ -79,7 +79,6 @@ const PAGE_TITLES = {
     'my-time': { title: 'My Time', subtitle: 'View your tracked time entries' },
     'my-weekly': { title: 'Weekly Summary', subtitle: 'Your weekly hours and earnings' },
     'my-timesheets': { title: 'My Timesheets', subtitle: 'Review and dispute your timesheet entries' },
-    'team-overview': { title: 'Team Overview', subtitle: 'Monitor team activity in real-time' },
     'time-review': { title: 'Time Review', subtitle: 'Review screenshots and approve time' },
     'weekly-reports': { title: 'Weekly Reports', subtitle: 'Team hours and costs by week' },
     'team-management': { title: 'Team Management', subtitle: 'Manage team members and rates' },
@@ -96,7 +95,7 @@ function setupNavigation() {
     });
 }
 
-const ADMIN_ONLY_PAGES = ['team-overview', 'time-review', 'weekly-reports', 'team-management', 'projects'];
+const ADMIN_ONLY_PAGES = ['time-review', 'weekly-reports', 'team-management', 'projects'];
 
 function navigateTo(page) {
     // Block freelancers from accessing admin-only pages
@@ -132,9 +131,6 @@ function navigateTo(page) {
             break;
         case 'my-timesheets':
             renderMyTimesheets();
-            break;
-        case 'team-overview':
-            if (typeof renderTeamOverview === 'function') renderTeamOverview();
             break;
         case 'time-review':
             if (typeof loadTimeReview === 'function') loadTimeReview();
@@ -818,8 +814,8 @@ function setupRealtime() {
                 if (!timeBlocks.find(b => b.id === newBlock.id)) {
                     timeBlocks.unshift(newBlock);
                 }
-                if (isAdmin && typeof renderTeamOverview === 'function') {
-                    renderTeamOverview();
+                if (isAdmin && typeof renderProjectManagement === 'function') {
+                    renderProjectManagement();
                 }
             }
         )
