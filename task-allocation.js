@@ -476,36 +476,8 @@ function renderOnboardingStatus() {
 }
 
 // ============================================================
-// AUTO-ONBOARD: Mark member as onboarded on first login
-// ============================================================
-async function markAsOnboarded() {
-    if (!supabaseClient || !currentTeamMember) return;
-
-    try {
-        // Check if already onboarded
-        const { data } = await supabaseClient
-            .from('tt_team_members')
-            .select('onboarded')
-            .eq('id', currentTeamMember.id)
-            .single();
-
-        if (data && !data.onboarded) {
-            await supabaseClient
-                .from('tt_team_members')
-                .update({ onboarded: true, onboarded_at: new Date().toISOString() })
-                .eq('id', currentTeamMember.id);
-
-            // Also update the invite status
-            await supabaseClient
-                .from('tt_onboarding_invites')
-                .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-                .eq('email', currentTeamMember.email)
-                .eq('status', 'pending');
-
-            debug('[Onboarding] Marked as onboarded:', currentTeamMember.name);
-        }
-    } catch (err) {
-        // Non-critical, silently fail
-        console.warn('[Onboarding] Auto-onboard error:', err);
-    }
+// AUTO-ONBOARD: No-op — schema does not have onboarding columns yet
+function markAsOnboarded() {
+    // Intentionally empty: tt_team_members has no 'onboarded' column.
+    // Re-enable once the column is added via migration.
 }
