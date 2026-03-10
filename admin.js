@@ -25,8 +25,8 @@ function renderTeamOverview() {
         todaySecsByUser[b.user_id] = (todaySecsByUser[b.user_id] || 0) + (b.duration_seconds || 0);
     });
 
-    // This week's cost (exclude disputed blocks)
-    const weekBlocks = timeBlocks.filter(b => isThisWeek(new Date(b.start_time)) && b.status !== 'disputed');
+    // This week's cost (exclude disputed and removed blocks)
+    const weekBlocks = timeBlocks.filter(b => isThisWeek(new Date(b.start_time)) && b.status !== 'disputed' && b.status !== 'removed');
     let weekCost = 0;
     weekBlocks.forEach(b => {
         const member = teamMembers.find(m => m.id === b.user_id);
@@ -123,9 +123,11 @@ function loadTimeReview() {
         const activityPercent = b.activity_percent || 0;
         const statusBadge = b.status === 'approved'
             ? '<span class="badge badge-success">Approved</span>'
-            : b.status === 'disputed'
-                ? '<span class="badge badge-danger">Disputed</span>'
-                : '<span class="badge badge-warning">Pending</span>';
+            : b.status === 'removed'
+                ? '<span class="badge badge-danger">Removed</span>'
+                : b.status === 'disputed'
+                    ? '<span class="badge badge-danger">Disputed</span>'
+                    : '<span class="badge badge-warning">Pending</span>';
 
         return `
             <div class="screenshot-card" data-block-id="${b.id}">
@@ -144,7 +146,9 @@ function loadTimeReview() {
                         <div class="screenshot-card-actions">
                             ${b.status === 'pending' ? `
                                 <button class="btn btn-success btn-sm" onclick="approveBlockById('${b.id}')">Approve</button>
-                                <button class="btn btn-danger btn-sm" onclick="disputeBlockById('${b.id}')">Dispute</button>
+                                <button class="btn btn-danger btn-sm" onclick="removeBlockById('${b.id}')">Remove</button>
+                            ` : b.status === 'approved' ? `
+                                <button class="btn btn-danger btn-sm" onclick="removeBlockById('${b.id}')">Remove</button>
                             ` : ''}
                         </div>
                     </div>
@@ -173,15 +177,31 @@ function viewScreenshotAdmin(blockId) {
 }
 
 async function approveBlockById(blockId) {
-    await updateBlockStatus(blockId, 'approved');
-    toast('Block approved', 'success');
-    loadTimeReview();
+    const block = timeBlocks.find(b => b.id === blockId);
+    if (!block) { toast('Block not found', 'error'); return; }
+    if (block.status === 'approved') { toast('Already approved', 'success'); return; }
+
+    const ok = await updateBlockStatus(blockId, 'approved');
+    if (ok) {
+        toast('Block approved', 'success');
+        loadTimeReview();
+    }
 }
 
-async function disputeBlockById(blockId) {
-    await updateBlockStatus(blockId, 'disputed');
-    toast('Block disputed', 'error');
-    loadTimeReview();
+async function removeBlockById(blockId) {
+    const block = timeBlocks.find(b => b.id === blockId);
+    if (!block) { toast('Block not found', 'error'); return; }
+    if (block.status === 'removed') { toast('Already removed', 'success'); return; }
+
+    const mins = Math.round((block.duration_seconds || 0) / 60);
+    const label = (block.user_name || 'Unknown') + ' — ' + (block.project_name || 'No Project') + ' (' + mins + 'm)';
+    if (!confirm('Remove this time block?\n\n' + label + '\n\nThis will deduct the time from weekly reports.')) return;
+
+    const ok = await updateBlockStatus(blockId, 'removed');
+    if (ok) {
+        toast('Block removed — deducted from reports', 'success');
+        loadTimeReview();
+    }
 }
 
 function approveBlock() {
@@ -191,15 +211,15 @@ function approveBlock() {
     }
 }
 
-function disputeBlock() {
+function removeBlock() {
     if (currentReviewBlockId) {
-        disputeBlockById(currentReviewBlockId);
+        removeBlockById(currentReviewBlockId);
         closeModal('screenshotModal');
     }
 }
 
 async function updateBlockStatus(blockId, status) {
-    if (!supabaseClient) return;
+    if (!supabaseClient) { toast('Not connected to database', 'error'); return false; }
 
     try {
         const { error } = await supabaseClient
@@ -209,14 +229,18 @@ async function updateBlockStatus(blockId, status) {
 
         if (error) {
             console.error('[Admin] Update status error:', error);
-            return;
+            toast('Failed to update block: ' + error.message, 'error');
+            return false;
         }
 
         // Update local cache
         const block = timeBlocks.find(b => b.id === blockId);
         if (block) block.status = status;
+        return true;
     } catch (err) {
         console.error('[Admin] Update error:', err);
+        toast('Failed to update block: ' + (err.message || 'Unknown error'), 'error');
+        return false;
     }
 }
 
@@ -257,8 +281,8 @@ function renderWeeklyReports() {
 
     freelancers.forEach(f => {
         const blocks = userBlocks[f.id] || [];
-        // Exclude disputed blocks from hours, cost, and outstanding balance
-        const billableBlocks = blocks.filter(b => b.status !== 'disputed');
+        // Exclude disputed and removed blocks from hours, cost, and outstanding balance
+        const billableBlocks = blocks.filter(b => b.status !== 'disputed' && b.status !== 'removed');
         const totalSecs = billableBlocks.reduce((s, b) => s + (b.duration_seconds || 0), 0);
         const hours = totalSecs / 3600;
         const cost = hours * f.hourlyRate;
@@ -276,10 +300,13 @@ function renderWeeklyReports() {
         const approved = blocks.filter(b => b.status === 'approved').length;
         const pending = blocks.filter(b => b.status === 'pending').length;
         const disputed = blocks.filter(b => b.status === 'disputed').length;
+        const removed = blocks.filter(b => b.status === 'removed').length;
 
         let statusBadge;
         if (blocks.length === 0) {
             statusBadge = '<span class="badge badge-neutral">No Data</span>';
+        } else if (removed > 0) {
+            statusBadge = '<span class="badge badge-danger">Removed (' + removed + ')</span>';
         } else if (disputed > 0) {
             statusBadge = '<span class="badge badge-danger">Disputed (' + disputed + ')</span>';
         } else if (pending > 0) {
@@ -329,6 +356,9 @@ function renderWeeklyReports() {
     } else {
         totalsCard.style.display = 'none';
     }
+
+    // Cost by project breakdown
+    renderProjectCosts(weekStart, weekEnd);
 }
 
 function changeWeek(direction) {
@@ -337,6 +367,11 @@ function changeWeek(direction) {
 }
 
 async function approveAllForUser(userId) {
+    if (!supabaseClient) { toast('Not connected to database', 'error'); return; }
+
+    const member = teamMembers.find(m => m.id === userId);
+    const memberName = member ? member.name : 'this freelancer';
+
     const weekStart = getWeekStart(new Date(), currentWeekOffset);
     const weekEnd = getWeekEnd(weekStart);
 
@@ -352,26 +387,33 @@ async function approveAllForUser(userId) {
         return;
     }
 
-    // Batch update in a single DB call instead of N round-trips
-    const { error } = await supabaseClient
-        .from('tt_time_blocks')
-        .update({ status: 'approved' })
-        .in('id', pendingBlocks.map(b => b.id));
+    if (!confirm('Approve all ' + pendingBlocks.length + ' pending blocks for ' + memberName + '?')) return;
 
-    if (error) {
-        console.error('[Admin] Batch approve error:', error);
-        toast('Failed to approve blocks: ' + error.message, 'error');
-        return;
+    try {
+        // Batch update in a single DB call instead of N round-trips
+        const { error } = await supabaseClient
+            .from('tt_time_blocks')
+            .update({ status: 'approved' })
+            .in('id', pendingBlocks.map(b => b.id));
+
+        if (error) {
+            console.error('[Admin] Batch approve error:', error);
+            toast('Failed to approve blocks: ' + error.message, 'error');
+            return;
+        }
+
+        // Update local cache
+        pendingBlocks.forEach(b => {
+            const cached = timeBlocks.find(t => t.id === b.id);
+            if (cached) cached.status = 'approved';
+        });
+
+        toast('Approved ' + pendingBlocks.length + ' blocks for ' + memberName, 'success');
+        renderWeeklyReports();
+    } catch (err) {
+        console.error('[Admin] Batch approve error:', err);
+        toast('Failed to approve blocks: ' + (err.message || 'Unknown error'), 'error');
     }
-
-    // Update local cache
-    pendingBlocks.forEach(b => {
-        const cached = timeBlocks.find(t => t.id === b.id);
-        if (cached) cached.status = 'approved';
-    });
-
-    toast(`Approved ${pendingBlocks.length} blocks`, 'success');
-    renderWeeklyReports();
 }
 
 // ============================================================
@@ -537,4 +579,249 @@ async function removeMember(memberId) {
     toast('Member deactivated', 'success');
     renderTeamManagement();
     populateProjectDropdowns();
+}
+
+// ============================================================
+// PROJECT MANAGEMENT
+// ============================================================
+let editingProjectId = null;
+
+function renderProjectManagement() {
+    if (!isAdmin) { toast('Access denied', 'error'); return; }
+
+    const active = mergedProjects.filter(p => p.status === 'active');
+    const inactive = mergedProjects.filter(p => p.status !== 'active');
+
+    const list = document.getElementById('projectList');
+    if (!list) return;
+
+    const countEl = document.getElementById('projectCount');
+    if (countEl) countEl.textContent = active.length + ' active';
+
+    if (active.length === 0) {
+        list.innerHTML = '<div class="empty-state">No active projects. Add one above.</div>';
+        return;
+    }
+
+    // Calculate hours tracked per project (all time)
+    const projectHours = {};
+    timeBlocks.forEach(b => {
+        if (b.status === 'removed' || b.status === 'disputed') return;
+        const key = b.project_id || b.project_name || '';
+        projectHours[key] = (projectHours[key] || 0) + (b.duration_seconds || 0);
+    });
+
+    list.innerHTML = active.map(p => {
+        const secs = projectHours[p.id] || projectHours[p.name] || 0;
+        const hours = (secs / 3600).toFixed(1);
+
+        return `
+            <div class="team-mgmt-row">
+                <div class="team-avatar" style="background:var(--grey-100);color:var(--grey-700);font-size:11px;">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                </div>
+                <div class="team-mgmt-info">
+                    <div class="team-mgmt-name">${escapeHtml(p.name)}</div>
+                    <div class="team-mgmt-email">${escapeHtml(p.client || p.description || '')}</div>
+                </div>
+                <div class="team-mgmt-rate">
+                    <span class="rate-value">${hours}h</span>
+                    <span class="rate-currency">tracked</span>
+                </div>
+                <span class="badge badge-success">Active</span>
+                <div class="team-mgmt-actions">
+                    <button class="btn btn-danger btn-sm" onclick="deactivateProject('${p.id}', '${escapeHtml(p.name)}')">Remove</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (inactive.length > 0) {
+        list.innerHTML += '<div class="section-divider-label">Inactive Projects (' + inactive.length + ')</div>';
+        list.innerHTML += inactive.map(p => `
+            <div class="team-mgmt-row dimmed">
+                <div class="team-avatar" style="background:var(--grey-100);color:var(--grey-400);font-size:11px;">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                </div>
+                <div class="team-mgmt-info">
+                    <div class="team-mgmt-name">${escapeHtml(p.name)}</div>
+                    <div class="team-mgmt-email">${escapeHtml(p.client || p.description || '')}</div>
+                </div>
+                <span class="badge badge-neutral">Inactive</span>
+                <div class="team-mgmt-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="reactivateProject('${p.id}')">Reactivate</button>
+                </div>
+            </div>
+        `).join('');
+    }
+}
+
+function openAddProjectModal() {
+    if (!isAdmin) { toast('Access denied', 'error'); return; }
+    editingProjectId = null;
+    document.getElementById('projectModalTitle').textContent = 'Add Project';
+    document.getElementById('projectForm').reset();
+    document.getElementById('projectCurrency').value = 'USD';
+    openModal('projectModal');
+}
+
+async function saveProjectForm(e) {
+    e.preventDefault();
+    if (!isAdmin || !supabaseClient) { toast('Access denied', 'error'); return; }
+
+    const name = document.getElementById('projectName').value.trim();
+    const description = document.getElementById('projectDescription').value.trim();
+    const hourlyRate = parseFloat(document.getElementById('projectRate').value) || null;
+    const currency = document.getElementById('projectCurrency').value;
+
+    if (!name) { toast('Project name is required', 'error'); return; }
+
+    // Check for duplicate name
+    const exists = mergedProjects.some(p => p.name.toLowerCase() === name.toLowerCase() && p.status === 'active');
+    if (exists && !editingProjectId) {
+        toast('A project with this name already exists', 'error');
+        return;
+    }
+
+    try {
+        const row = {
+            name,
+            description: description || null,
+            hourly_rate: hourlyRate,
+            currency: currency || 'USD',
+            status: 'active',
+            source: 'tracker',
+            updated_at: new Date().toISOString()
+        };
+
+        if (editingProjectId) {
+            const { error } = await supabaseClient
+                .from('projects')
+                .update(row)
+                .eq('id', editingProjectId);
+            if (error) throw error;
+        } else {
+            const { error } = await supabaseClient
+                .from('projects')
+                .insert(row);
+            if (error) throw error;
+        }
+
+        closeModal('projectModal');
+        toast(editingProjectId ? 'Project updated' : 'Project added', 'success');
+        editingProjectId = null;
+
+        // Refresh projects
+        await populateProjectDropdowns();
+        renderProjectManagement();
+    } catch (err) {
+        console.error('[Projects] Save error:', err);
+        toast('Failed to save project: ' + (err.message || 'Unknown error'), 'error');
+    }
+}
+
+async function deactivateProject(projectId, projectName) {
+    if (!isAdmin || !supabaseClient) { toast('Access denied', 'error'); return; }
+
+    if (!confirm('Remove "' + projectName + '" from active projects?\n\nExisting time entries will be preserved.')) return;
+
+    try {
+        const { error } = await supabaseClient
+            .from('projects')
+            .update({ status: 'inactive', updated_at: new Date().toISOString() })
+            .eq('id', projectId);
+
+        if (error) throw error;
+
+        toast('Project deactivated', 'success');
+        await populateProjectDropdowns();
+        renderProjectManagement();
+    } catch (err) {
+        console.error('[Projects] Deactivate error:', err);
+        toast('Failed to deactivate project: ' + (err.message || 'Unknown error'), 'error');
+    }
+}
+
+async function reactivateProject(projectId) {
+    if (!isAdmin || !supabaseClient) { toast('Access denied', 'error'); return; }
+
+    try {
+        const { error } = await supabaseClient
+            .from('projects')
+            .update({ status: 'active', updated_at: new Date().toISOString() })
+            .eq('id', projectId);
+
+        if (error) throw error;
+
+        toast('Project reactivated', 'success');
+        await populateProjectDropdowns();
+        renderProjectManagement();
+    } catch (err) {
+        console.error('[Projects] Reactivate error:', err);
+        toast('Failed to reactivate project: ' + (err.message || 'Unknown error'), 'error');
+    }
+}
+
+// ============================================================
+// COST BY PROJECT (in Weekly Reports)
+// ============================================================
+function renderProjectCosts(weekStart, weekEnd) {
+    const weekBlocks = timeBlocks.filter(b => {
+        const d = new Date(b.start_time);
+        return d >= weekStart && d <= weekEnd && b.status !== 'disputed' && b.status !== 'removed';
+    });
+
+    const card = document.getElementById('projectCostCard');
+    const list = document.getElementById('projectCostList');
+
+    if (weekBlocks.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+
+    // Group by project
+    const byProject = {};
+    weekBlocks.forEach(b => {
+        const key = b.project_name || b.project_id || 'Unassigned';
+        if (!byProject[key]) {
+            byProject[key] = { name: key, totalSecs: 0, cost: 0, blocks: 0 };
+        }
+        byProject[key].totalSecs += (b.duration_seconds || 0);
+        byProject[key].blocks += 1;
+
+        // Calculate cost using the freelancer's rate from the block or team member
+        const member = teamMembers.find(m => m.id === b.user_id);
+        const rate = member ? member.hourlyRate : (b.hourly_rate || 0);
+        byProject[key].cost += ((b.duration_seconds || 0) / 3600) * rate;
+    });
+
+    // Sort by cost descending
+    const projects = Object.values(byProject).sort((a, b) => b.cost - a.cost);
+    const totalCost = projects.reduce((s, p) => s + p.cost, 0);
+
+    card.style.display = 'block';
+    list.innerHTML = projects.map(p => {
+        const hours = (p.totalSecs / 3600).toFixed(1);
+        const pct = totalCost > 0 ? Math.round((p.cost / totalCost) * 100) : 0;
+
+        return `
+            <div class="report-card" style="grid-template-columns:1fr auto auto auto;">
+                <div class="report-info">
+                    <div class="report-name">${escapeHtml(p.name)}</div>
+                    <div class="report-role">${p.blocks} blocks &middot; ${hours}h</div>
+                </div>
+                <div class="report-metrics">
+                    <div class="report-metric">
+                        <div class="report-metric-value">${hours}h</div>
+                        <div class="report-metric-label">Hours</div>
+                    </div>
+                    <div class="report-metric">
+                        <div class="report-metric-value">${pct}%</div>
+                        <div class="report-metric-label">of Total</div>
+                    </div>
+                </div>
+                <div class="report-cost">$${p.cost.toFixed(0)}</div>
+            </div>
+        `;
+    }).join('');
 }

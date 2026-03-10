@@ -3,26 +3,32 @@
 // ============================================================
 
 async function populateProjectDropdowns() {
-    // Merge hardcoded projects with Supabase projects table
+    // Merge hardcoded projects with Supabase projects table (de-duplicated by name)
     let allProjects = [...TT_PROJECTS];
 
     try {
         if (supabaseClient) {
             const { data } = await supabaseClient
                 .from('projects')
-                .select('id, name, status')
-                .eq('status', 'active')
+                .select('id, name, status, description, hourly_rate, currency')
                 .order('name');
 
             if (data && data.length > 0) {
-                const existingIds = new Set(TT_PROJECTS.map(p => p.id));
-                const existingNames = new Set(TT_PROJECTS.map(p => p.name.toLowerCase()));
+                const existingNames = new Set(allProjects.map(p => p.name.toLowerCase()));
                 data.forEach(p => {
-                    if (!existingIds.has(p.id) && !existingNames.has(p.name.toLowerCase())) {
-                        allProjects.push({ id: p.id, name: p.name, client: '', status: p.status });
+                    const lower = p.name.toLowerCase();
+                    if (!existingNames.has(lower)) {
+                        existingNames.add(lower);
+                        allProjects.push({
+                            id: p.id, name: p.name, client: '',
+                            description: p.description || '',
+                            hourlyRate: p.hourly_rate || null,
+                            currency: p.currency || 'USD',
+                            status: p.status || 'active'
+                        });
                     }
                 });
-                debug('[Projects] Merged', data.length, 'Supabase projects with', TT_PROJECTS.length, 'local projects');
+                debug('[Projects] Merged', data.length, 'Supabase projects (de-duped) with', TT_PROJECTS.length, 'local projects →', allProjects.length, 'total');
             }
         }
     } catch (err) {

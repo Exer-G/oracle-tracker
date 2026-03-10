@@ -83,6 +83,7 @@ const PAGE_TITLES = {
     'time-review': { title: 'Time Review', subtitle: 'Review screenshots and approve time' },
     'weekly-reports': { title: 'Weekly Reports', subtitle: 'Team hours and costs by week' },
     'team-management': { title: 'Team Management', subtitle: 'Manage team members and rates' },
+    'projects': { title: 'Projects', subtitle: 'Manage active projects and budgets' },
     'settings': { title: 'Settings', subtitle: 'Profile and tracker configuration' },
 };
 
@@ -95,7 +96,7 @@ function setupNavigation() {
     });
 }
 
-const ADMIN_ONLY_PAGES = ['team-overview', 'time-review', 'weekly-reports', 'team-management'];
+const ADMIN_ONLY_PAGES = ['team-overview', 'time-review', 'weekly-reports', 'team-management', 'projects'];
 
 function navigateTo(page) {
     // Block freelancers from accessing admin-only pages
@@ -143,6 +144,9 @@ function navigateTo(page) {
             break;
         case 'team-management':
             if (typeof renderTeamManagement === 'function') renderTeamManagement();
+            break;
+        case 'projects':
+            if (typeof renderProjectManagement === 'function') renderProjectManagement();
             break;
     }
 
@@ -608,12 +612,13 @@ function renderMyTimesheets() {
     const approved = myBlocks.filter(b => b.status === 'approved');
     const pending = myBlocks.filter(b => b.status === 'pending');
     const disputed = myBlocks.filter(b => b.status === 'disputed');
+    const removed = myBlocks.filter(b => b.status === 'removed');
 
     document.getElementById('tsApprovedCount').textContent = approved.length;
     document.getElementById('tsPendingCount').textContent = pending.length;
-    document.getElementById('tsDisputedCount').textContent = disputed.length;
+    document.getElementById('tsDisputedCount').textContent = disputed.length + removed.length;
 
-    const outstandingBlocks = myBlocks.filter(b => b.status !== 'disputed');
+    const outstandingBlocks = myBlocks.filter(b => b.status !== 'disputed' && b.status !== 'removed');
     const outstandingSecs = outstandingBlocks.reduce((s, b) => s + (b.duration_seconds || 0), 0);
     const outstandingBalance = calculateEarnings(outstandingSecs, currentTeamMember.hourlyRate);
     document.getElementById('tsOutstandingBalance').textContent = formatCurrency(outstandingBalance, currentTeamMember.currency);
@@ -621,6 +626,8 @@ function renderMyTimesheets() {
     let filtered;
     if (currentTimesheetFilter === 'all') {
         filtered = myBlocks;
+    } else if (currentTimesheetFilter === 'disputed') {
+        filtered = myBlocks.filter(b => b.status === 'disputed' || b.status === 'removed');
     } else {
         filtered = myBlocks.filter(b => b.status === currentTimesheetFilter);
     }
@@ -636,9 +643,11 @@ function renderMyTimesheets() {
     list.innerHTML = filtered.map(b => {
         const statusBadge = b.status === 'approved'
             ? '<span class="badge badge-success">Approved</span>'
-            : b.status === 'disputed'
-                ? '<span class="badge badge-danger">Disputed</span>'
-                : '<span class="badge badge-warning">Pending</span>';
+            : b.status === 'removed'
+                ? '<span class="badge badge-danger">Removed</span>'
+                : b.status === 'disputed'
+                    ? '<span class="badge badge-danger">Disputed</span>'
+                    : '<span class="badge badge-warning">Pending</span>';
 
         const activityClass = getActivityBadgeClass(b.activity_percent || 0);
         const dateStr = new Date(b.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
