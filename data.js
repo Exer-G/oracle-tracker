@@ -3,7 +3,8 @@
 // ============================================================
 
 async function populateProjectDropdowns() {
-    // Merge hardcoded projects with Supabase projects table (de-duplicated by name)
+    // Merge hardcoded projects with Supabase projects table
+    // Supabase status overrides hardcoded status when a project exists in both
     let allProjects = [...TT_PROJECTS];
 
     try {
@@ -14,11 +15,36 @@ async function populateProjectDropdowns() {
                 .order('name');
 
             if (data && data.length > 0) {
-                const existingNames = new Set(allProjects.map(p => p.name.toLowerCase()));
+                // Build lookup of Supabase projects by ID and by lowercase name
+                const supaById = {};
+                const supaByName = {};
                 data.forEach(p => {
-                    const lower = p.name.toLowerCase();
-                    if (!existingNames.has(lower)) {
-                        existingNames.add(lower);
+                    supaById[p.id] = p;
+                    supaByName[p.name.toLowerCase()] = p;
+                });
+
+                // Update hardcoded projects with Supabase status (Supabase wins)
+                allProjects = allProjects.map(p => {
+                    const match = supaById[p.id] || supaByName[p.name.toLowerCase()];
+                    if (match) {
+                        return {
+                            ...p,
+                            id: match.id,  // prefer Supabase UUID
+                            status: match.status || p.status,
+                            description: match.description || p.description || '',
+                            hourlyRate: match.hourly_rate || p.hourlyRate || null,
+                            currency: match.currency || p.currency || 'USD',
+                        };
+                    }
+                    return p;
+                });
+
+                // Add Supabase-only projects (not in hardcoded list)
+                const existingNames = new Set(allProjects.map(p => p.name.toLowerCase()));
+                const existingIds = new Set(allProjects.map(p => p.id));
+                data.forEach(p => {
+                    if (!existingIds.has(p.id) && !existingNames.has(p.name.toLowerCase())) {
+                        existingNames.add(p.name.toLowerCase());
                         allProjects.push({
                             id: p.id, name: p.name, client: '',
                             description: p.description || '',
@@ -28,7 +54,7 @@ async function populateProjectDropdowns() {
                         });
                     }
                 });
-                debug('[Projects] Merged', data.length, 'Supabase projects (de-duped) with', TT_PROJECTS.length, 'local projects →', allProjects.length, 'total');
+                debug('[Projects] Merged', data.length, 'Supabase projects with', TT_PROJECTS.length, 'local projects →', allProjects.length, 'total');
             }
         }
     } catch (err) {

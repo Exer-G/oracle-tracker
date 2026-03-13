@@ -665,10 +665,37 @@ async function deactivateProject(projectId, projectName) {
     if (!confirm('Remove "' + projectName + '" from active projects?\n\nExisting time entries will be preserved.')) return;
 
     try {
-        const { error } = await supabaseClient
-            .from('projects')
-            .update({ status: 'inactive', updated_at: new Date().toISOString() })
-            .eq('id', projectId);
+        // Use upsert so hardcoded-only projects get inserted into Supabase as inactive
+        const project = mergedProjects.find(p => p.id === projectId);
+        const row = {
+            name: projectName,
+            description: project?.description || null,
+            hourly_rate: project?.hourlyRate || null,
+            currency: project?.currency || 'USD',
+            source: 'tracker',
+            status: 'inactive',
+            updated_at: new Date().toISOString()
+        };
+
+        // Try upsert with existing id; if id isn't a valid UUID, fall back to insert
+        let error;
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectId);
+        if (isUUID) {
+            ({ error } = await supabaseClient
+                .from('projects')
+                .upsert({ id: projectId, ...row }, { onConflict: 'id' }));
+        } else {
+            // Non-UUID id (e.g. 'internal') — update by name or insert new
+            ({ error } = await supabaseClient
+                .from('projects')
+                .update(row)
+                .eq('name', projectName));
+            if (error) {
+                ({ error } = await supabaseClient
+                    .from('projects')
+                    .insert(row));
+            }
+        }
 
         if (error) throw error;
 
@@ -685,10 +712,19 @@ async function reactivateProject(projectId) {
     if (!isAdmin || !supabaseClient) { toast('Access denied', 'error'); return; }
 
     try {
+        const project = mergedProjects.find(p => p.id === projectId);
         const { error } = await supabaseClient
             .from('projects')
-            .update({ status: 'active', updated_at: new Date().toISOString() })
-            .eq('id', projectId);
+            .upsert({
+                id: projectId,
+                name: project?.name || '',
+                description: project?.description || null,
+                hourly_rate: project?.hourlyRate || null,
+                currency: project?.currency || 'USD',
+                source: 'tracker',
+                status: 'active',
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
 
         if (error) throw error;
 
