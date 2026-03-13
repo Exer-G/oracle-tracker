@@ -569,6 +569,7 @@ function renderProjectManagement() {
                     </div>
                 </div>
                 <div class="project-tile-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="editProject('${p.id}')">Edit</button>
                     <button class="btn btn-danger btn-sm" onclick="deactivateProject('${p.id}', '${escapeHtml(p.name)}')">Remove</button>
                 </div>
             </div>
@@ -586,6 +587,7 @@ function renderProjectManagement() {
                     <span class="badge badge-neutral">Inactive</span>
                 </div>
                 <div class="project-tile-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="editProject('${p.id}')">Edit</button>
                     <button class="btn btn-secondary btn-sm" onclick="reactivateProject('${p.id}')">Reactivate</button>
                 </div>
             </div>
@@ -601,6 +603,20 @@ function openAddProjectModal() {
     document.getElementById('projectModalTitle').textContent = 'Add Project';
     document.getElementById('projectForm').reset();
     document.getElementById('projectCurrency').value = 'USD';
+    openModal('projectModal');
+}
+
+function editProject(projectId) {
+    if (!isAdmin) { toast('Access denied', 'error'); return; }
+    const project = mergedProjects.find(p => p.id === projectId);
+    if (!project) { toast('Project not found', 'error'); return; }
+
+    editingProjectId = projectId;
+    document.getElementById('projectModalTitle').textContent = 'Edit Project';
+    document.getElementById('projectName').value = project.name || '';
+    document.getElementById('projectDescription').value = project.description || project.client || '';
+    document.getElementById('projectRate').value = project.hourlyRate || '';
+    document.getElementById('projectCurrency').value = project.currency || 'USD';
     openModal('projectModal');
 }
 
@@ -634,10 +650,26 @@ async function saveProjectForm(e) {
         };
 
         if (editingProjectId) {
-            const { error } = await supabaseClient
-                .from('projects')
-                .update(row)
-                .eq('id', editingProjectId);
+            // Use upsert so edits to hardcoded-only projects get persisted to Supabase
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(editingProjectId);
+            let error;
+            if (isUUID) {
+                ({ error } = await supabaseClient
+                    .from('projects')
+                    .upsert({ id: editingProjectId, ...row }, { onConflict: 'id' }));
+            } else {
+                // Non-UUID id — try update by name, fall back to insert
+                const oldProject = mergedProjects.find(p => p.id === editingProjectId);
+                ({ error } = await supabaseClient
+                    .from('projects')
+                    .update(row)
+                    .eq('name', oldProject?.name || name));
+                if (error) {
+                    ({ error } = await supabaseClient
+                        .from('projects')
+                        .insert(row));
+                }
+            }
             if (error) throw error;
         } else {
             const { error } = await supabaseClient
